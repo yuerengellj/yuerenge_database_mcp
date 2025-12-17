@@ -2,11 +2,16 @@
 MCP Database Tools Server
 """
 
-import sys
 import os
+import sys
+import threading
+import time
+
 from mcp.server.fastmcp import FastMCP
+
 from .config.config_manager import DatabaseConfigManager
 from .db_tools.database_manager import DatabaseManager
+from .server_lifecycle import get_lifecycle_manager, add_cleanup_callback
 
 # Create an MCP server with custom configuration
 # You can specify the database config path like this:
@@ -16,7 +21,7 @@ from .db_tools.database_manager import DatabaseManager
 #       "command": "python",
 #       "args": ["db_server.py"],
 #       "env": {
-#         "DATABASE_CONFIG_PATH": "D:\\File\\Workspace\\mcp configs\\yuerenge-database-mcp\\database_config.json"
+#       "DATABASE_CONFIG_PATH": "D:\\File\\Workspace\\mcp configs\\yuerenge-database-mcp\\database_config.json"
 #       }
 #     }
 #   }
@@ -50,6 +55,7 @@ from .db_tools.db_tools import (
     get_table_structure,
     create_table,
     drop_table,
+    alter_table,
     # 4. Data Query Tools
     execute_query,
     select_data,
@@ -85,6 +91,7 @@ mcp.add_tool(list_tables)
 mcp.add_tool(get_table_structure)
 mcp.add_tool(create_table)
 mcp.add_tool(drop_table)
+mcp.add_tool(alter_table)
 
 # 4. Data Query Tools
 mcp.add_tool(execute_query)
@@ -101,6 +108,25 @@ mcp.add_tool(select_data_paged)
 mcp.add_tool(select_data_summary)
 mcp.add_tool(select_data_html)
 
+
+def cleanup_database_connections():
+    """Clean up all database connections."""
+    if db_manager:
+        try:
+            db_manager.dispose_all_connections()
+        except Exception as e:
+            print(f"Error disposing database connections: {e}", file=sys.stderr)
+
+
+async def shutdown_handler():
+    """Handle server shutdown gracefully."""
+    lifecycle_manager = get_lifecycle_manager()
+    print("Shutting down database MCP server...", file=sys.stderr)
+    await lifecycle_manager.cleanup()
+    cleanup_database_connections()
+    print("Database MCP server shutdown complete.", file=sys.stderr)
+
+
 def main():
     """Main entry point for the database MCP server."""
     print("Starting Database MCP Server...", file=sys.stderr)
@@ -108,7 +134,76 @@ def main():
         print(f"Using config file: {config_file_path}", file=sys.stderr)
     else:
         print("Using default config location.", file=sys.stderr)
-    mcp.run(transport="stdio")
+
+    # Setup lifecycle management
+    lifecycle_manager = get_lifecycle_manager()
+    add_cleanup_callback(cleanup_database_connections)
+    lifecycle_manager.setup_signal_handlers()
+
+    # Flag to indicate if server should stop
+    should_stop = threading.Event()
+
+    # Override the signal handlers to also set our flag
+    def signal_handler(signum, frame):
+        signame = signal.Signals(signum).name if 'signal' in globals() else signum
+        print(f"Received signal {signame}, initiating shutdown...", file=sys.stderr)
+        should_stop.set()
+
+    # Set up signal handlers
+    import signal
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+    # Thread function to monitor stdin
+    def stdin_monitor():
+        while not should_stop.is_set():
+            try:
+                if sys.stdin.closed:
+                    print("Stdin closed, initiating shutdown...", file=sys.stderr)
+                    should_stop.set()
+                    break
+                time.sleep(0.5)
+            except Exception:
+                print("Error reading stdin, assuming closed...", file=sys.stderr)
+                should_stop.set()
+                break
+
+    # Start stdin monitoring thread
+    stdin_thread = threading.Thread(target=stdin_monitor, daemon=True)
+    stdin_thread.start()
+
+    # Run the server in a separate thread
+    def run_server():
+        try:
+            mcp.run(transport="stdio")
+        except Exception as e:
+            print(f"Error during server execution: {e}", file=sys.stderr)
+        finally:
+            should_stop.set()
+
+    server_thread = threading.Thread(target=run_server, daemon=True)
+    server_thread.start()
+
+    # Wait for shutdown signal
+    try:
+        while not should_stop.wait(0.1):
+            pass
+    except KeyboardInterrupt:
+        print("Keyboard interrupt received, shutting down...", file=sys.stderr)
+        should_stop.set()
+
+    # Wait for threads to finish
+    server_thread.join(timeout=2)
+    stdin_thread.join(timeout=1)
+
+    # Perform cleanup
+    import asyncio
+    try:
+        asyncio.run(shutdown_handler())
+    except RuntimeError:
+        # If there's already an event loop, create a new task
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(shutdown_handler())
 
 # Run with streamable HTTP transport
 if __name__ == "__main__":

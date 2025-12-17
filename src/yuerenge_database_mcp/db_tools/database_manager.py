@@ -2,12 +2,13 @@
 Database Manager for handling multiple database connections.
 """
 import logging
-from typing import Dict, Any, Optional, List
-from sqlalchemy import create_engine, text
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.engine import Engine
-from datetime import datetime, date
 import re
+from datetime import datetime, date
+from typing import Dict, Any, Optional, List
+
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
+from sqlalchemy.exc import SQLAlchemyError
 
 
 def is_datetime_string(value: str) -> bool:
@@ -1061,6 +1062,187 @@ class DatabaseManager:
             self.logger.error(f"Drop table failed on '{connection_name}.{table_name}': {str(e)}")
             return False
 
+    def alter_table(self, connection_name: str, table_name: str,
+                    operations: List[Dict[str, Any]]) -> bool:
+        """
+        Alter table structure with various operations.
+        
+        Args:
+            connection_name: Name of the database connection
+            table_name: Name of the table to alter
+            operations: List of operations to perform. Each operation is a dict with:
+                       - operation: Type of operation ('add_column', 'drop_column', 'modify_column', 'rename_column')
+                       - For add_column: name, type, [length], [nullable], [default], [comment]
+                       - For drop_column: name
+                       - For modify_column: name, type, [length], [nullable], [default], [comment]
+                       - For rename_column: old_name, new_name
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        engine = self.get_connection(connection_name)
+        if not engine:
+            self.logger.error(f"Connection '{connection_name}' not found")
+            return False
+
+        try:
+            db_type = engine.url.drivername.split('+')[0]
+
+            with engine.connect() as conn:
+                trans = conn.begin()
+                try:
+                    for op in operations:
+                        operation = op.get('operation')
+
+                        if operation == 'add_column':
+                            # Add a new column
+                            column_def = op['name'] + ' ' + op['type']
+
+                            # Handle length specification
+                            if 'length' in op:
+                                if isinstance(op['length'], (list, tuple)):
+                                    column_def += f"({op['length'][0]},{op['length'][1]})"  # precision,scale
+                                else:
+                                    column_def += f"({op['length']})"
+
+                            # Handle nullable constraint
+                            if 'nullable' in op and not op['nullable']:
+                                column_def += ' NOT NULL'
+
+                            # Handle default value
+                            if 'default' in op:
+                                default_val = op['default']
+                                if isinstance(default_val, str):
+                                    column_def += f" DEFAULT '{default_val}'"
+                                else:
+                                    column_def += f" DEFAULT {default_val}"
+
+                            query = f"ALTER TABLE {table_name} ADD COLUMN {column_def}"
+                            if db_type == "oracle":
+                                # Oracle doesn't use "COLUMN" keyword
+                                query = f"ALTER TABLE {table_name} ADD ({column_def})"
+
+                            conn.execute(text(query))
+
+                            # Add column comment if provided
+                            if 'comment' in op and op['comment']:
+                                if db_type == "mysql":
+                                    comment_query = f"ALTER TABLE {table_name} MODIFY COLUMN {op['name']} {op['type']} COMMENT '{op['comment']}'"
+                                    conn.execute(text(comment_query))
+                                elif db_type == "oracle":
+                                    comment_query = f"COMMENT ON COLUMN {table_name}.{op['name']} IS '{op['comment']}'"
+                                    conn.execute(text(comment_query))
+
+                        elif operation == 'drop_column':
+                            # Drop a column
+                            query = f"ALTER TABLE {table_name} DROP COLUMN {op['name']}"
+                            if db_type == "oracle":
+                                # Oracle doesn't use "COLUMN" keyword
+                                query = f"ALTER TABLE {table_name} DROP ({op['name']})"
+
+                            conn.execute(text(query))
+
+                        elif operation == 'modify_column':
+                            # Modify a column
+                            if db_type == "mysql":
+                                column_def = op['name'] + ' ' + op['type']
+
+                                # Handle length specification
+                                if 'length' in op:
+                                    if isinstance(op['length'], (list, tuple)):
+                                        column_def += f"({op['length'][0]},{op['length'][1]})"  # precision,scale
+                                    else:
+                                        column_def += f"({op['length']})"
+
+                                # Handle nullable constraint
+                                if 'nullable' in op and not op['nullable']:
+                                    column_def += ' NOT NULL'
+                                else:
+                                    column_def += ' NULL'
+
+                                # Handle default value
+                                if 'default' in op:
+                                    default_val = op['default']
+                                    if isinstance(default_val, str):
+                                        column_def += f" DEFAULT '{default_val}'"
+                                    else:
+                                        column_def += f" DEFAULT {default_val}"
+
+                                query = f"ALTER TABLE {table_name} MODIFY COLUMN {column_def}"
+                                conn.execute(text(query))
+
+                                # Add column comment if provided
+                                if 'comment' in op and op['comment']:
+                                    comment_query = f"ALTER TABLE {table_name} MODIFY COLUMN {op['name']} {op['type']} COMMENT '{op['comment']}'"
+                                    conn.execute(text(comment_query))
+
+                            elif db_type == "oracle":
+                                # For Oracle, we may need multiple operations
+                                # Change data type if specified
+                                if 'type' in op:
+                                    column_def = op['name'] + ' ' + op['type']
+
+                                    # Handle length specification
+                                    if 'length' in op:
+                                        if isinstance(op['length'], (list, tuple)):
+                                            column_def += f"({op['length'][0]},{op['length'][1]})"  # precision,scale
+                                        else:
+                                            column_def += f"({op['length']})"
+
+                                    query = f"ALTER TABLE {table_name} MODIFY ({column_def})"
+                                    conn.execute(text(query))
+
+                                # Change nullability if specified
+                                if 'nullable' in op:
+                                    if not op['nullable']:
+                                        query = f"ALTER TABLE {table_name} MODIFY ({op['name']} NOT NULL)"
+                                    else:
+                                        query = f"ALTER TABLE {table_name} MODIFY ({op['name']} NULL)"
+                                    conn.execute(text(query))
+
+                                # Change default value if specified
+                                if 'default' in op:
+                                    if op['default'] is None:
+                                        query = f"ALTER TABLE {table_name} MODIFY ({op['name']} DEFAULT NULL)"
+                                    else:
+                                        default_val = op['default']
+                                        if isinstance(default_val, str):
+                                            query = f"ALTER TABLE {table_name} MODIFY ({op['name']} DEFAULT '{default_val}')"
+                                        else:
+                                            query = f"ALTER TABLE {table_name} MODIFY ({op['name']} DEFAULT {default_val})"
+                                    conn.execute(text(query))
+
+                                # Add column comment if provided
+                                if 'comment' in op and op['comment']:
+                                    comment_query = f"COMMENT ON COLUMN {table_name}.{op['name']} IS '{op['comment']}'"
+                                    conn.execute(text(comment_query))
+
+                        elif operation == 'rename_column':
+                            # Rename a column
+                            if db_type == "mysql":
+                                # Need column definition for rename in MySQL
+                                # This is a simplified version - in practice you would need the full column definition
+                                query = f"ALTER TABLE {table_name} CHANGE COLUMN {op['old_name']} {op['new_name']} {op.get('definition', '')}"
+                                conn.execute(text(query))
+                            elif db_type == "oracle":
+                                query = f"ALTER TABLE {table_name} RENAME COLUMN {op['old_name']} TO {op['new_name']}"
+                                conn.execute(text(query))
+
+                    trans.commit()
+                    self.logger.info(f"Successfully altered table '{connection_name}.{table_name}'")
+                    return True
+
+                except Exception as e:
+                    trans.rollback()
+                    raise e
+
+        except SQLAlchemyError as e:
+            self.logger.error(f"Alter table failed on '{connection_name}.{table_name}': {str(e)}")
+            return False
+        except Exception as e:
+            self.logger.error(f"Unexpected error during alter table on '{connection_name}.{table_name}': {str(e)}")
+            return False
+
     def format_as_table(self, data: List[Dict[str, Any]], connection_name: str, table_name: str) -> str:
         """
         Format data as a table string with column comments.
@@ -1682,3 +1864,15 @@ class DatabaseManager:
         lines.append(separator)
 
         return "\n".join(lines)
+
+    def dispose_all_connections(self):
+        """
+        Dispose all database connections.
+        This should be called during server shutdown for graceful cleanup.
+        """
+        for name, engine in self.connections.items():
+            try:
+                engine.dispose()
+            except Exception as e:
+                self.logger.error(f"Error disposing connection '{name}': {str(e)}")
+        self.connections.clear()

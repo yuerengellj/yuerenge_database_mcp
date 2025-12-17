@@ -2,11 +2,12 @@
 Database tools for MCP server.
 """
 
-from typing import List, Dict, Any, Optional
-from mcp.server.fastmcp import FastMCP
-import webbrowser
 import os
 import tempfile
+import webbrowser
+from typing import List, Dict, Any, Optional
+
+from mcp.server.fastmcp import FastMCP
 
 # Create an MCP server instance
 mcp = FastMCP("DatabaseTools")
@@ -243,6 +244,28 @@ def drop_table(connection_name: str, table_name: str,
         bool: True if successful, False otherwise
     """
     return db_manager.drop_table(connection_name, table_name, cascade)
+
+
+@mcp.tool()
+def alter_table(connection_name: str, table_name: str,
+                operations: List[Dict[str, Any]]) -> bool:
+    """
+    Alter table structure with various operations.
+    
+    Args:
+        connection_name: Name of the database connection
+        table_name: Name of the table to alter
+        operations: List of operations to perform. Each operation is a dict with:
+                   - operation: Type of operation ('add_column', 'drop_column', 'modify_column', 'rename_column')
+                   - For add_column: name, type, [length], [nullable], [default], [comment]
+                   - For drop_column: name
+                   - For modify_column: name, type, [length], [nullable], [default], [comment]
+                   - For rename_column: old_name, new_name
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    return db_manager.alter_table(connection_name, table_name, operations)
 
 
 # =============================================================================
