@@ -1,0 +1,22 @@
+[project]
+name = "yuerenge-database-mcp"
+version = "0.1.2"
+description = "A database management tool based on the MCP protocol"
+readme = "README.md"
+authors = [
+    { name = "yuerenge", email = "2309814831@qq.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "mcp[cli]>=1.24.0",
+    "sqlalchemy>=2.0.0",
+    "pymysql>=1.1.0",
+    "oracledb>=2.0.0",
+]
+
+[project.scripts]
+yuerenge-database-mcp = "yuerenge_database_mcp:main"
+
+[build-system]
+requires = ["uv_build>=0.9.17,<0.10.0"]
+build-backend = "uv_build"
