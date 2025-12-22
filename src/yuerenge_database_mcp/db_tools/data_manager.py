@@ -3,6 +3,7 @@ Data Manager for handling data operations.
 """
 
 import logging
+import re
 from datetime import datetime, date
 from typing import Dict, Any, Optional, List
 from sqlalchemy import text
@@ -79,13 +80,14 @@ class DataManager:
         self.connection_manager = connection_manager
         self.logger = logging.getLogger(__name__)
 
-    def execute_query(self, connection_name: str, query: str, commit: bool = False) -> Optional[list]:
+    def execute_query(self, connection_name: str, query: str, params: Optional[Dict[str, Any]] = None, commit: bool = False) -> Optional[list]:
         """
         Execute a query on a specific database.
 
         Args:
             connection_name: Name of the database connection
             query: SQL query to execute
+            params: Parameters for the SQL query
             commit: Whether to commit the transaction (useful for INSERT/UPDATE/DELETE)
 
         Returns:
@@ -100,7 +102,10 @@ class DataManager:
             with engine.connect() as conn:
                 trans = conn.begin() if commit else None
                 try:
-                    result = conn.execute(text(query))
+                    if params:
+                        result = conn.execute(text(query), params)
+                    else:
+                        result = conn.execute(text(query))
                     if commit:
                         trans.commit()
                     # Convert to list of dictionaries
@@ -140,11 +145,11 @@ class DataManager:
             return None
 
         try:
-            # Use adapter to generate SELECT query
-            query = adapter.get_select_query(table_name, conditions, limit)
+            # Use adapter to generate SELECT query and parameters
+            query, params = adapter.get_select_query(table_name, conditions, limit)
 
             with engine.connect() as conn:
-                result = conn.execute(text(query))
+                result = conn.execute(text(query), params)
                 columns = result.keys()
                 rows = result.fetchall()
 
@@ -207,8 +212,8 @@ class DataManager:
                 else:
                     processed_data[key] = value
 
-            # Use adapter to generate INSERT query
-            query = adapter.get_insert_query(table_name, processed_data)
+            # Use adapter to generate INSERT query and parameters
+            query, params = adapter.get_insert_query(table_name, processed_data)
 
             with engine.connect() as conn:
                 trans = conn.begin()
@@ -216,15 +221,15 @@ class DataManager:
                     # For Oracle, we may need special handling
                     if "oracle" in engine.url.drivername:
                         # Handle Oracle datetime values
-                        params = {}
-                        for key, value in processed_data.items():
+                        oracle_params = {}
+                        for key, value in params.items():
                             if isinstance(value, datetime) or (isinstance(value, str) and is_datetime_string(value)):
-                                params[key] = format_datetime_for_oracle(value)
+                                oracle_params[key] = format_datetime_for_oracle(value)
                             else:
-                                params[key] = value
-                        conn.execute(text(query), params)
+                                oracle_params[key] = value
+                        conn.execute(text(query), oracle_params)
                     else:
-                        conn.execute(text(query), processed_data)
+                        conn.execute(text(query), params)
                     trans.commit()
                     return True
                 except Exception as e:
@@ -261,13 +266,13 @@ class DataManager:
             return -1
 
         try:
-            # Use adapter to generate UPDATE query
-            query = adapter.get_update_query(table_name, data, conditions)
+            # Use adapter to generate UPDATE query and parameters
+            query, params = adapter.get_update_query(table_name, data, conditions)
 
             with engine.connect() as conn:
                 trans = conn.begin()
                 try:
-                    result = conn.execute(text(query))
+                    result = conn.execute(text(query), params)
                     trans.commit()
                     return result.rowcount
                 except Exception as e:
@@ -303,13 +308,13 @@ class DataManager:
             return -1
 
         try:
-            # Use adapter to generate DELETE query
-            query = adapter.get_delete_query(table_name, conditions)
+            # Use adapter to generate DELETE query and parameters
+            query, params = adapter.get_delete_query(table_name, conditions)
 
             with engine.connect() as conn:
                 trans = conn.begin()
                 try:
-                    result = conn.execute(text(query))
+                    result = conn.execute(text(query), params)
                     trans.commit()
                     return result.rowcount
                 except Exception as e:

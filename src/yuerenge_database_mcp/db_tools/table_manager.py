@@ -4,6 +4,7 @@ Table Manager for handling table structure operations.
 
 import logging
 import re
+from datetime import datetime, date
 from typing import Dict, Any, Optional, List
 from sqlalchemy import text
 from sqlalchemy.engine import Engine

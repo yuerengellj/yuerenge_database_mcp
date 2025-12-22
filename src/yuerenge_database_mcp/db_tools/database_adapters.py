@@ -4,7 +4,7 @@ Provides unified interface for database-specific operations.
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from sqlalchemy import text
 
 
@@ -54,24 +54,24 @@ class DatabaseAdapter(ABC):
 
     @abstractmethod
     def get_select_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None, 
-                        limit: Optional[int] = None) -> str:
-        """Generate SELECT query."""
+                        limit: Optional[int] = None) -> Tuple[str, Dict[str, Any]]:
+        """Generate SELECT query and parameters."""
         pass
 
     @abstractmethod
-    def get_insert_query(self, table_name: str, data: Dict[str, Any]) -> str:
-        """Generate INSERT query."""
+    def get_insert_query(self, table_name: str, data: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
+        """Generate INSERT query and parameters."""
         pass
 
     @abstractmethod
     def get_update_query(self, table_name: str, data: Dict[str, Any], 
-                        conditions: Optional[Dict[str, Any]] = None) -> str:
-        """Generate UPDATE query."""
+                        conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
+        """Generate UPDATE query and parameters."""
         pass
 
     @abstractmethod
-    def get_delete_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None) -> str:
-        """Generate DELETE query."""
+    def get_delete_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
+        """Generate DELETE query and parameters."""
         pass
 
 
@@ -181,56 +181,52 @@ class MySQLAdapter(DatabaseAdapter):
             raise ValueError(f"Unsupported alter table operation: {op_type}")
 
     def get_select_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None, 
-                        limit: Optional[int] = None) -> str:
+                        limit: Optional[int] = None) -> Tuple[str, Dict[str, Any]]:
         query = f"SELECT * FROM `{table_name}`"
+        params = {}
         if conditions:
             condition_strs = []
             for key, value in conditions.items():
-                if isinstance(value, str):
-                    condition_strs.append(f"`{key}` = '{value}'")
-                else:
-                    condition_strs.append(f"`{key}` = {value}")
+                condition_strs.append(f"`{key}` = :{key}")
+                params[key] = value
             query += " WHERE " + " AND ".join(condition_strs)
         if limit:
             query += f" LIMIT {limit}"
-        return query
+        return query, params
 
-    def get_insert_query(self, table_name: str, data: Dict[str, Any]) -> str:
+    def get_insert_query(self, table_name: str, data: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
         columns = ", ".join([f"`{k}`" for k in data.keys()])
-        values = ", ".join([f"'{v}'" if isinstance(v, str) else str(v) for v in data.values()])
-        return f"INSERT INTO `{table_name}` ({columns}) VALUES ({values})"
+        placeholders = ", ".join([f":{k}" for k in data.keys()])
+        query = f"INSERT INTO `{table_name}` ({columns}) VALUES ({placeholders})"
+        return query, data
 
     def get_update_query(self, table_name: str, data: Dict[str, Any], 
-                        conditions: Optional[Dict[str, Any]] = None) -> str:
+                        conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
         set_strs = []
+        params = {}
         for key, value in data.items():
-            if isinstance(value, str):
-                set_strs.append(f"`{key}` = '{value}'")
-            else:
-                set_strs.append(f"`{key}` = {value}")
+            set_strs.append(f"`{key}` = :{key}_{len(params)}")
+            params[f"{key}_{len(params)}"] = value
         
         query = f"UPDATE `{table_name}` SET " + ", ".join(set_strs)
         if conditions:
             condition_strs = []
             for key, value in conditions.items():
-                if isinstance(value, str):
-                    condition_strs.append(f"`{key}` = '{value}'")
-                else:
-                    condition_strs.append(f"`{key}` = {value}")
+                condition_strs.append(f"`{key}` = :cond_{key}")
+                params[f"cond_{key}"] = value
             query += " WHERE " + " AND ".join(condition_strs)
-        return query
+        return query, params
 
-    def get_delete_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None) -> str:
+    def get_delete_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
         query = f"DELETE FROM `{table_name}`"
+        params = {}
         if conditions:
             condition_strs = []
             for key, value in conditions.items():
-                if isinstance(value, str):
-                    condition_strs.append(f"`{key}` = '{value}'")
-                else:
-                    condition_strs.append(f"`{key}` = {value}")
+                condition_strs.append(f"`{key}` = :{key}")
+                params[key] = value
             query += " WHERE " + " AND ".join(condition_strs)
-        return query
+        return query, params
 
 
 class OracleAdapter(DatabaseAdapter):
@@ -351,56 +347,52 @@ class OracleAdapter(DatabaseAdapter):
             raise ValueError(f"Unsupported alter table operation: {op_type}")
 
     def get_select_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None, 
-                        limit: Optional[int] = None) -> str:
+                        limit: Optional[int] = None) -> Tuple[str, Dict[str, Any]]:
         query = f"SELECT * FROM {table_name.upper()}"
+        params = {}
         if conditions:
             condition_strs = []
             for key, value in conditions.items():
-                if isinstance(value, str):
-                    condition_strs.append(f"{key} = '{value}'")
-                else:
-                    condition_strs.append(f"{key} = {value}")
+                condition_strs.append(f"{key} = :{key}")
+                params[key] = value
             query += " WHERE " + " AND ".join(condition_strs)
         if limit:
             query += f" FETCH FIRST {limit} ROWS ONLY"
-        return query
+        return query, params
 
-    def get_insert_query(self, table_name: str, data: Dict[str, Any]) -> str:
+    def get_insert_query(self, table_name: str, data: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
         columns = ", ".join([k for k in data.keys()])
-        values = ", ".join([f"'{v}'" if isinstance(v, str) else str(v) for v in data.values()])
-        return f"INSERT INTO {table_name.upper()} ({columns}) VALUES ({values})"
+        placeholders = ", ".join([f":{k}" for k in data.keys()])
+        query = f"INSERT INTO {table_name.upper()} ({columns}) VALUES ({placeholders})"
+        return query, data
 
     def get_update_query(self, table_name: str, data: Dict[str, Any], 
-                        conditions: Optional[Dict[str, Any]] = None) -> str:
+                        conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
         set_strs = []
+        params = {}
         for key, value in data.items():
-            if isinstance(value, str):
-                set_strs.append(f"{key} = '{value}'")
-            else:
-                set_strs.append(f"{key} = {value}")
+            set_strs.append(f"{key} = :{key}_{len(params)}")
+            params[f"{key}_{len(params)}"] = value
         
         query = f"UPDATE {table_name.upper()} SET " + ", ".join(set_strs)
         if conditions:
             condition_strs = []
             for key, value in conditions.items():
-                if isinstance(value, str):
-                    condition_strs.append(f"{key} = '{value}'")
-                else:
-                    condition_strs.append(f"{key} = {value}")
+                condition_strs.append(f"{key} = :cond_{key}")
+                params[f"cond_{key}"] = value
             query += " WHERE " + " AND ".join(condition_strs)
-        return query
+        return query, params
 
-    def get_delete_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None) -> str:
+    def get_delete_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
         query = f"DELETE FROM {table_name.upper()}"
+        params = {}
         if conditions:
             condition_strs = []
             for key, value in conditions.items():
-                if isinstance(value, str):
-                    condition_strs.append(f"{key} = '{value}'")
-                else:
-                    condition_strs.append(f"{key} = {value}")
+                condition_strs.append(f"{key} = :{key}")
+                params[key] = value
             query += " WHERE " + " AND ".join(condition_strs)
-        return query
+        return query, params
 
 
 class PostgreSQLAdapter(DatabaseAdapter):
@@ -518,56 +510,52 @@ class PostgreSQLAdapter(DatabaseAdapter):
             raise ValueError(f"Unsupported alter table operation: {op_type}")
 
     def get_select_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None, 
-                        limit: Optional[int] = None) -> str:
+                        limit: Optional[int] = None) -> Tuple[str, Dict[str, Any]]:
         query = f"SELECT * FROM {table_name.lower()}"
+        params = {}
         if conditions:
             condition_strs = []
             for key, value in conditions.items():
-                if isinstance(value, str):
-                    condition_strs.append(f"{key} = '{value}'")
-                else:
-                    condition_strs.append(f"{key} = {value}")
+                condition_strs.append(f"{key} = :{key}")
+                params[key] = value
             query += " WHERE " + " AND ".join(condition_strs)
         if limit:
             query += f" LIMIT {limit}"
-        return query
+        return query, params
 
-    def get_insert_query(self, table_name: str, data: Dict[str, Any]) -> str:
+    def get_insert_query(self, table_name: str, data: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
         columns = ", ".join([k for k in data.keys()])
-        values = ", ".join([f"'{v}'" if isinstance(v, str) else str(v) for v in data.values()])
-        return f"INSERT INTO {table_name.lower()} ({columns}) VALUES ({values})"
+        placeholders = ", ".join([f":{k}" for k in data.keys()])
+        query = f"INSERT INTO {table_name.lower()} ({columns}) VALUES ({placeholders})"
+        return query, data
 
     def get_update_query(self, table_name: str, data: Dict[str, Any], 
-                        conditions: Optional[Dict[str, Any]] = None) -> str:
+                        conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
         set_strs = []
+        params = {}
         for key, value in data.items():
-            if isinstance(value, str):
-                set_strs.append(f"{key} = '{value}'")
-            else:
-                set_strs.append(f"{key} = {value}")
+            set_strs.append(f"{key} = :{key}_{len(params)}")
+            params[f"{key}_{len(params)}"] = value
         
         query = f"UPDATE {table_name.lower()} SET " + ", ".join(set_strs)
         if conditions:
             condition_strs = []
             for key, value in conditions.items():
-                if isinstance(value, str):
-                    condition_strs.append(f"{key} = '{value}'")
-                else:
-                    condition_strs.append(f"{key} = {value}")
+                condition_strs.append(f"{key} = :cond_{key}")
+                params[f"cond_{key}"] = value
             query += " WHERE " + " AND ".join(condition_strs)
-        return query
+        return query, params
 
-    def get_delete_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None) -> str:
+    def get_delete_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
         query = f"DELETE FROM {table_name.lower()}"
+        params = {}
         if conditions:
             condition_strs = []
             for key, value in conditions.items():
-                if isinstance(value, str):
-                    condition_strs.append(f"{key} = '{value}'")
-                else:
-                    condition_strs.append(f"{key} = {value}")
+                condition_strs.append(f"{key} = :{key}")
+                params[key] = value
             query += " WHERE " + " AND ".join(condition_strs)
-        return query
+        return query, params
 
 
 class SQLiteAdapter(DatabaseAdapter):
@@ -654,56 +642,52 @@ class SQLiteAdapter(DatabaseAdapter):
             raise ValueError(f"Unsupported alter table operation: {op_type}")
 
     def get_select_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None, 
-                        limit: Optional[int] = None) -> str:
+                        limit: Optional[int] = None) -> Tuple[str, Dict[str, Any]]:
         query = f"SELECT * FROM {table_name}"
+        params = {}
         if conditions:
             condition_strs = []
             for key, value in conditions.items():
-                if isinstance(value, str):
-                    condition_strs.append(f"{key} = '{value}'")
-                else:
-                    condition_strs.append(f"{key} = {value}")
+                condition_strs.append(f"{key} = :{key}")
+                params[key] = value
             query += " WHERE " + " AND ".join(condition_strs)
         if limit:
             query += f" LIMIT {limit}"
-        return query
+        return query, params
 
-    def get_insert_query(self, table_name: str, data: Dict[str, Any]) -> str:
+    def get_insert_query(self, table_name: str, data: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
         columns = ", ".join([k for k in data.keys()])
-        values = ", ".join([f"'{v}'" if isinstance(v, str) else str(v) for v in data.values()])
-        return f"INSERT INTO {table_name} ({columns}) VALUES ({values})"
+        placeholders = ", ".join([f":{k}" for k in data.keys()])
+        query = f"INSERT INTO {table_name} ({columns}) VALUES ({placeholders})"
+        return query, data
 
     def get_update_query(self, table_name: str, data: Dict[str, Any], 
-                        conditions: Optional[Dict[str, Any]] = None) -> str:
+                        conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
         set_strs = []
+        params = {}
         for key, value in data.items():
-            if isinstance(value, str):
-                set_strs.append(f"{key} = '{value}'")
-            else:
-                set_strs.append(f"{key} = {value}")
+            set_strs.append(f"{key} = :{key}_{len(params)}")
+            params[f"{key}_{len(params)}"] = value
         
         query = f"UPDATE {table_name} SET " + ", ".join(set_strs)
         if conditions:
             condition_strs = []
             for key, value in conditions.items():
-                if isinstance(value, str):
-                    condition_strs.append(f"{key} = '{value}'")
-                else:
-                    condition_strs.append(f"{key} = {value}")
+                condition_strs.append(f"{key} = :cond_{key}")
+                params[f"cond_{key}"] = value
             query += " WHERE " + " AND ".join(condition_strs)
-        return query
+        return query, params
 
-    def get_delete_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None) -> str:
+    def get_delete_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
         query = f"DELETE FROM {table_name}"
+        params = {}
         if conditions:
             condition_strs = []
             for key, value in conditions.items():
-                if isinstance(value, str):
-                    condition_strs.append(f"{key} = '{value}'")
-                else:
-                    condition_strs.append(f"{key} = {value}")
+                condition_strs.append(f"{key} = :{key}")
+                params[key] = value
             query += " WHERE " + " AND ".join(condition_strs)
-        return query
+        return query, params
 
 
 class SQLServerAdapter(DatabaseAdapter):
@@ -806,56 +790,52 @@ class SQLServerAdapter(DatabaseAdapter):
             raise ValueError(f"Unsupported alter table operation: {op_type}")
 
     def get_select_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None, 
-                        limit: Optional[int] = None) -> str:
+                        limit: Optional[int] = None) -> Tuple[str, Dict[str, Any]]:
         query = f"SELECT * FROM {table_name}"
+        params = {}
         if conditions:
             condition_strs = []
             for key, value in conditions.items():
-                if isinstance(value, str):
-                    condition_strs.append(f"{key} = '{value}'")
-                else:
-                    condition_strs.append(f"{key} = {value}")
+                condition_strs.append(f"{key} = :{key}")
+                params[key] = value
             query += " WHERE " + " AND ".join(condition_strs)
         if limit:
             query += f" TOP {limit}"
-        return query
+        return query, params
 
-    def get_insert_query(self, table_name: str, data: Dict[str, Any]) -> str:
+    def get_insert_query(self, table_name: str, data: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
         columns = ", ".join([k for k in data.keys()])
-        values = ", ".join([f"'{v}'" if isinstance(v, str) else str(v) for v in data.values()])
-        return f"INSERT INTO {table_name} ({columns}) VALUES ({values})"
+        placeholders = ", ".join([f":{k}" for k in data.keys()])
+        query = f"INSERT INTO {table_name} ({columns}) VALUES ({placeholders})"
+        return query, data
 
     def get_update_query(self, table_name: str, data: Dict[str, Any], 
-                        conditions: Optional[Dict[str, Any]] = None) -> str:
+                        conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
         set_strs = []
+        params = {}
         for key, value in data.items():
-            if isinstance(value, str):
-                set_strs.append(f"{key} = '{value}'")
-            else:
-                set_strs.append(f"{key} = {value}")
+            set_strs.append(f"{key} = :{key}_{len(params)}")
+            params[f"{key}_{len(params)}"] = value
         
         query = f"UPDATE {table_name} SET " + ", ".join(set_strs)
         if conditions:
             condition_strs = []
             for key, value in conditions.items():
-                if isinstance(value, str):
-                    condition_strs.append(f"{key} = '{value}'")
-                else:
-                    condition_strs.append(f"{key} = {value}")
+                condition_strs.append(f"{key} = :cond_{key}")
+                params[f"cond_{key}"] = value
             query += " WHERE " + " AND ".join(condition_strs)
-        return query
+        return query, params
 
-    def get_delete_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None) -> str:
+    def get_delete_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
         query = f"DELETE FROM {table_name}"
+        params = {}
         if conditions:
             condition_strs = []
             for key, value in conditions.items():
-                if isinstance(value, str):
-                    condition_strs.append(f"{key} = '{value}'")
-                else:
-                    condition_strs.append(f"{key} = {value}")
+                condition_strs.append(f"{key} = :{key}")
+                params[key] = value
             query += " WHERE " + " AND ".join(condition_strs)
-        return query
+        return query, params
 
 
 def get_database_adapter(db_type: str) -> DatabaseAdapter:
