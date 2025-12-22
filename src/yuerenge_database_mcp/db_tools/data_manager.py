@@ -172,6 +172,85 @@ class DataManager:
             self.logger.error(f"Select data failed on '{connection_name}.{table_name}': {str(e)}")
             return None
 
+    def select_data_with_pagination(self, connection_name: str, table_name: str, 
+                                   page: int = 1, page_size: int = 100,
+                                   conditions: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+        """
+        Select data from a specific table with pagination support.
+
+        Args:
+            connection_name: Name of the database connection
+            table_name: Name of the table
+            page: Page number (starting from 1)
+            page_size: Number of records per page
+            conditions: Optional dictionary of column-value pairs for WHERE clause
+
+        Returns:
+            Dictionary containing 'data', 'page', 'page_size', 'total_pages', 'total_records' or None if error occurred
+        """
+        engine = self.connection_manager.get_connection(connection_name)
+        if not engine:
+            self.logger.error(f"Connection '{connection_name}' not found")
+            return None
+
+        # Get the appropriate adapter
+        adapter = self.connection_manager.get_adapter(connection_name)
+        if not adapter:
+            self.logger.error(f"Adapter for connection '{connection_name}' not found")
+            return None
+
+        try:
+            # First get total count
+            count_query, count_params = adapter.get_count_query(table_name, conditions)
+            
+            with engine.connect() as conn:
+                count_result = conn.execute(text(count_query), count_params)
+                total_records = count_result.scalar()
+                
+                # Calculate pagination info
+                total_pages = (total_records + page_size - 1) // page_size
+                offset = (page - 1) * page_size
+                
+                # Add pagination to conditions
+                paginated_conditions = {
+                    "limit": page_size,
+                    "offset": offset
+                }
+                if conditions:
+                    paginated_conditions.update(conditions)
+                
+                # Use adapter to generate paginated SELECT query and parameters
+                query, params = adapter.get_paginated_select_query(table_name, paginated_conditions)
+
+                result = conn.execute(text(query), params)
+                columns = result.keys()
+                rows = result.fetchall()
+
+                # Process rows to handle datetime objects
+                processed_rows = []
+                for row in rows:
+                    processed_row = {}
+                    for i, column in enumerate(columns):
+                        value = row[i]
+                        # Handle datetime objects by converting to string
+                        if hasattr(value, 'strftime'):
+                            processed_row[column] = value.strftime('%Y-%m-%d %H:%M:%S')
+                        else:
+                            processed_row[column] = value
+                    processed_rows.append(processed_row)
+
+                return {
+                    "data": processed_rows,
+                    "page": page,
+                    "page_size": page_size,
+                    "total_pages": total_pages,
+                    "total_records": total_records
+                }
+
+        except SQLAlchemyError as e:
+            self.logger.error(f"Select data with pagination failed on '{connection_name}.{table_name}': {str(e)}")
+            return None
+
     def insert_data(self, connection_name: str, table_name: str, data: Dict[str, Any]) -> bool:
         """
         Insert data into a specific table.

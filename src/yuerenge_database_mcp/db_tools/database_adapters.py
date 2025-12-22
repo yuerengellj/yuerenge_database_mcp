@@ -59,6 +59,16 @@ class DatabaseAdapter(ABC):
         pass
 
     @abstractmethod
+    def get_count_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
+        """Generate COUNT query and parameters for pagination."""
+        pass
+
+    @abstractmethod
+    def get_paginated_select_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
+        """Generate paginated SELECT query and parameters."""
+        pass
+
+    @abstractmethod
     def get_insert_query(self, table_name: str, data: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
         """Generate INSERT query and parameters."""
         pass
@@ -192,6 +202,59 @@ class MySQLAdapter(DatabaseAdapter):
             query += " WHERE " + " AND ".join(condition_strs)
         if limit:
             query += f" LIMIT {limit}"
+        return query, params
+
+    def get_count_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
+        """
+        Generate COUNT query and parameters for pagination.
+        
+        Args:
+            table_name: Name of the table
+            conditions: Optional dictionary of column-value pairs for WHERE clause
+            
+        Returns:
+            Tuple of query string and parameters dictionary
+        """
+        query = f"SELECT COUNT(*) FROM `{table_name}`"
+        params = {}
+        if conditions:
+            condition_strs = []
+            for key, value in conditions.items():
+                condition_strs.append(f"`{key}` = :{key}")
+                params[key] = value
+            query += " WHERE " + " AND ".join(condition_strs)
+        return query, params
+
+    def get_paginated_select_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
+        """
+        Generate paginated SELECT query and parameters.
+        
+        Args:
+            table_name: Name of the table
+            conditions: Optional dictionary of column-value pairs for WHERE clause
+                        May include 'limit' and 'offset' keys for pagination
+            
+        Returns:
+            Tuple of query string and parameters dictionary
+        """
+        query = f"SELECT * FROM `{table_name}`"
+        params = {}
+        
+        limit = conditions.pop('limit', None) if conditions else None
+        offset = conditions.pop('offset', None) if conditions else None
+        
+        if conditions:
+            condition_strs = []
+            for key, value in conditions.items():
+                condition_strs.append(f"`{key}` = :{key}")
+                params[key] = value
+            query += " WHERE " + " AND ".join(condition_strs)
+            
+        if limit is not None:
+            query += f" LIMIT {limit}"
+            if offset is not None:
+                query += f" OFFSET {offset}"
+                
         return query, params
 
     def get_insert_query(self, table_name: str, data: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
@@ -360,6 +423,61 @@ class OracleAdapter(DatabaseAdapter):
             query += f" FETCH FIRST {limit} ROWS ONLY"
         return query, params
 
+    def get_count_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
+        """
+        Generate COUNT query and parameters for pagination.
+        
+        Args:
+            table_name: Name of the table
+            conditions: Optional dictionary of column-value pairs for WHERE clause
+            
+        Returns:
+            Tuple of query string and parameters dictionary
+        """
+        query = f"SELECT COUNT(*) FROM {table_name.upper()}"
+        params = {}
+        if conditions:
+            condition_strs = []
+            for key, value in conditions.items():
+                condition_strs.append(f"{key} = :{key}")
+                params[key] = value
+            query += " WHERE " + " AND ".join(condition_strs)
+        return query, params
+
+    def get_paginated_select_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
+        """
+        Generate paginated SELECT query and parameters.
+        
+        Args:
+            table_name: Name of the table
+            conditions: Optional dictionary of column-value pairs for WHERE clause
+                        May include 'limit' and 'offset' keys for pagination
+            
+        Returns:
+            Tuple of query string and parameters dictionary
+        """
+        query = f"SELECT * FROM {table_name.upper()}"
+        params = {}
+        
+        limit = conditions.pop('limit', None) if conditions else None
+        offset = conditions.pop('offset', None) if conditions else None
+        
+        if conditions:
+            condition_strs = []
+            for key, value in conditions.items():
+                condition_strs.append(f"{key} = :{key}")
+                params[key] = value
+            query += " WHERE " + " AND ".join(condition_strs)
+            
+        if limit is not None:
+            query += f" FETCH FIRST {limit} ROWS ONLY"
+            if offset is not None:
+                # Oracle uses ROWNUM or OFFSET/FETCH clauses depending on version
+                # Using OFFSET/FETCH for newer versions
+                query += f" OFFSET {offset} ROWS"
+                
+        return query, params
+
     def get_insert_query(self, table_name: str, data: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
         columns = ", ".join([k for k in data.keys()])
         placeholders = ", ".join([f":{k}" for k in data.keys()])
@@ -523,6 +641,59 @@ class PostgreSQLAdapter(DatabaseAdapter):
             query += f" LIMIT {limit}"
         return query, params
 
+    def get_count_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
+        """
+        Generate COUNT query and parameters for pagination.
+        
+        Args:
+            table_name: Name of the table
+            conditions: Optional dictionary of column-value pairs for WHERE clause
+            
+        Returns:
+            Tuple of query string and parameters dictionary
+        """
+        query = f"SELECT COUNT(*) FROM {table_name.lower()}"
+        params = {}
+        if conditions:
+            condition_strs = []
+            for key, value in conditions.items():
+                condition_strs.append(f"{key} = :{key}")
+                params[key] = value
+            query += " WHERE " + " AND ".join(condition_strs)
+        return query, params
+
+    def get_paginated_select_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
+        """
+        Generate paginated SELECT query and parameters.
+        
+        Args:
+            table_name: Name of the table
+            conditions: Optional dictionary of column-value pairs for WHERE clause
+                        May include 'limit' and 'offset' keys for pagination
+            
+        Returns:
+            Tuple of query string and parameters dictionary
+        """
+        query = f"SELECT * FROM {table_name.lower()}"
+        params = {}
+        
+        limit = conditions.pop('limit', None) if conditions else None
+        offset = conditions.pop('offset', None) if conditions else None
+        
+        if conditions:
+            condition_strs = []
+            for key, value in conditions.items():
+                condition_strs.append(f"{key} = :{key}")
+                params[key] = value
+            query += " WHERE " + " AND ".join(condition_strs)
+            
+        if limit is not None:
+            query += f" LIMIT {limit}"
+            if offset is not None:
+                query += f" OFFSET {offset}"
+                
+        return query, params
+
     def get_insert_query(self, table_name: str, data: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
         columns = ", ".join([k for k in data.keys()])
         placeholders = ", ".join([f":{k}" for k in data.keys()])
@@ -653,6 +824,59 @@ class SQLiteAdapter(DatabaseAdapter):
             query += " WHERE " + " AND ".join(condition_strs)
         if limit:
             query += f" LIMIT {limit}"
+        return query, params
+
+    def get_count_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
+        """
+        Generate COUNT query and parameters for pagination.
+        
+        Args:
+            table_name: Name of the table
+            conditions: Optional dictionary of column-value pairs for WHERE clause
+            
+        Returns:
+            Tuple of query string and parameters dictionary
+        """
+        query = f"SELECT COUNT(*) FROM {table_name}"
+        params = {}
+        if conditions:
+            condition_strs = []
+            for key, value in conditions.items():
+                condition_strs.append(f"{key} = :{key}")
+                params[key] = value
+            query += " WHERE " + " AND ".join(condition_strs)
+        return query, params
+
+    def get_paginated_select_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
+        """
+        Generate paginated SELECT query and parameters.
+        
+        Args:
+            table_name: Name of the table
+            conditions: Optional dictionary of column-value pairs for WHERE clause
+                        May include 'limit' and 'offset' keys for pagination
+            
+        Returns:
+            Tuple of query string and parameters dictionary
+        """
+        query = f"SELECT * FROM {table_name}"
+        params = {}
+        
+        limit = conditions.pop('limit', None) if conditions else None
+        offset = conditions.pop('offset', None) if conditions else None
+        
+        if conditions:
+            condition_strs = []
+            for key, value in conditions.items():
+                condition_strs.append(f"{key} = :{key}")
+                params[key] = value
+            query += " WHERE " + " AND ".join(condition_strs)
+            
+        if limit is not None:
+            query += f" LIMIT {limit}"
+            if offset is not None:
+                query += f" OFFSET {offset}"
+                
         return query, params
 
     def get_insert_query(self, table_name: str, data: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
@@ -791,22 +1015,88 @@ class SQLServerAdapter(DatabaseAdapter):
 
     def get_select_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None, 
                         limit: Optional[int] = None) -> Tuple[str, Dict[str, Any]]:
-        query = f"SELECT * FROM {table_name}"
+        query = f"SELECT * FROM [{table_name}]"
         params = {}
         if conditions:
             condition_strs = []
             for key, value in conditions.items():
-                condition_strs.append(f"{key} = :{key}")
+                condition_strs.append(f"[{key}] = :{key}")
                 params[key] = value
             query += " WHERE " + " AND ".join(condition_strs)
         if limit:
-            query += f" TOP {limit}"
+            query = f"SELECT TOP {limit} * FROM [{table_name}]"
+            if conditions:
+                condition_strs = []
+                for key, value in conditions.items():
+                    condition_strs.append(f"[{key}] = :{key}")
+                    params[key] = value
+                query += " WHERE " + " AND ".join(condition_strs)
+        return query, params
+
+    def get_count_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
+        """
+        Generate COUNT query and parameters for pagination.
+        
+        Args:
+            table_name: Name of the table
+            conditions: Optional dictionary of column-value pairs for WHERE clause
+            
+        Returns:
+            Tuple of query string and parameters dictionary
+        """
+        query = f"SELECT COUNT(*) FROM [{table_name}]"
+        params = {}
+        if conditions:
+            condition_strs = []
+            for key, value in conditions.items():
+                condition_strs.append(f"[{key}] = :{key}")
+                params[key] = value
+            query += " WHERE " + " AND ".join(condition_strs)
+        return query, params
+
+    def get_paginated_select_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
+        """
+        Generate paginated SELECT query and parameters.
+        
+        Args:
+            table_name: Name of the table
+            conditions: Optional dictionary of column-value pairs for WHERE clause
+                        May include 'limit' and 'offset' keys for pagination
+            
+        Returns:
+            Tuple of query string and parameters dictionary
+        """
+        # SQL Server uses a different approach for pagination
+        query = f"SELECT * FROM (SELECT *, ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS rn FROM [{table_name}]"
+        params = {}
+        
+        limit = conditions.pop('limit', None) if conditions else None
+        offset = conditions.pop('offset', None) if conditions else None
+        
+        if conditions:
+            condition_strs = []
+            for key, value in conditions.items():
+                condition_strs.append(f"[{key}] = :{key}")
+                params[key] = value
+            query += " WHERE " + " AND ".join(condition_strs)
+        
+        query += ") AS numbered WHERE "
+        
+        if offset is not None:
+            query += f"rn > {offset}"
+            if limit is not None:
+                query += f" AND rn <= {offset + limit}"
+        elif limit is not None:
+            query += f"rn <= {limit}"
+        else:
+            query = query.rstrip(" WHERE ")
+            
         return query, params
 
     def get_insert_query(self, table_name: str, data: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
         columns = ", ".join([k for k in data.keys()])
         placeholders = ", ".join([f":{k}" for k in data.keys()])
-        query = f"INSERT INTO {table_name} ({columns}) VALUES ({placeholders})"
+        query = f"INSERT INTO [{table_name}] ({columns}) VALUES ({placeholders})"
         return query, data
 
     def get_update_query(self, table_name: str, data: Dict[str, Any], 
@@ -817,7 +1107,7 @@ class SQLServerAdapter(DatabaseAdapter):
             set_strs.append(f"{key} = :{key}_{len(params)}")
             params[f"{key}_{len(params)}"] = value
         
-        query = f"UPDATE {table_name} SET " + ", ".join(set_strs)
+        query = f"UPDATE [{table_name}] SET " + ", ".join(set_strs)
         if conditions:
             condition_strs = []
             for key, value in conditions.items():
@@ -827,7 +1117,7 @@ class SQLServerAdapter(DatabaseAdapter):
         return query, params
 
     def get_delete_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
-        query = f"DELETE FROM {table_name}"
+        query = f"DELETE FROM [{table_name}]"
         params = {}
         if conditions:
             condition_strs = []
