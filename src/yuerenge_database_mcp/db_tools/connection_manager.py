@@ -38,12 +38,23 @@ class ConnectionManager:
             username: Database username
             password: Database password
             database: Database name
-            **kwargs: Additional connection parameters
+            **kwargs: Additional connection parameters including pool settings
 
         Returns:
             bool: True if connection successful, False otherwise
         """
         try:
+            # Extract connection pool settings from kwargs or use defaults
+            pool_settings = {
+                'pool_size': kwargs.pop('pool_size', 10),
+                'max_overflow': kwargs.pop('max_overflow', 20),
+                'pool_timeout': kwargs.pop('pool_timeout', 30),
+                'pool_recycle': kwargs.pop('pool_recycle', 3600)
+            }
+            
+            # Add any remaining kwargs as additional engine options
+            engine_options = {**pool_settings, **kwargs}
+            
             # Create connection string based on database type
             if db_type.lower() == "mysql":
                 connection_string = (
@@ -61,8 +72,8 @@ class ConnectionManager:
             else:
                 raise ValueError(f"Unsupported database type: {db_type}")
 
-            # Create engine
-            engine = create_engine(connection_string, **kwargs)
+            # Create engine with additional options
+            engine = create_engine(connection_string, **engine_options)
 
             # Test connection
             with engine.connect() as conn:
@@ -116,15 +127,24 @@ class ConnectionManager:
 
             name = conn_config["name"]
             try:
-                success = self.add_connection(
-                    name=name,
-                    db_type=conn_config["type"],
-                    host=conn_config["host"],
-                    port=conn_config["port"],
-                    username=conn_config["username"],
-                    password=conn_config["password"],
-                    database=conn_config["database"]
-                )
+                # Extract connection parameters
+                connection_params = {
+                    "name": name,
+                    "db_type": conn_config["type"],
+                    "host": conn_config["host"],
+                    "port": conn_config["port"],
+                    "username": conn_config["username"],
+                    "password": conn_config["password"],
+                    "database": conn_config["database"]
+                }
+                
+                # Add optional connection pool parameters
+                optional_params = ["pool_size", "max_overflow", "pool_timeout", "pool_recycle"]
+                for param in optional_params:
+                    if param in conn_config:
+                        connection_params[param] = conn_config[param]
+                
+                success = self.add_connection(**connection_params)
                 results[name] = success
             except Exception as e:
                 self.logger.error(f"Failed to initialize connection '{name}': {str(e)}")

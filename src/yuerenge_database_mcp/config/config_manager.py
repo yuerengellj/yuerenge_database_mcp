@@ -7,6 +7,11 @@ import os
 from typing import Dict, List, Any
 
 
+class ConfigValidationError(Exception):
+    """Exception raised for configuration validation errors."""
+    pass
+
+
 class DatabaseConfigManager:
     """Manages database connection configurations."""
 
@@ -16,12 +21,14 @@ class DatabaseConfigManager:
         
         Args:
             config_file: Path to the configuration file. If not provided, 
-                        will try to read from DB_CONFIG_FILE environment variable,
+                        will try to read from DATABASE_CONFIG_PATH environment variable,
                         otherwise defaults to "config/database_config.json"
         """
         if config_file is None:
             # Try to get config file path from environment variable
-            self.config_file = os.environ.get('DB_CONFIG_FILE', os.path.join(os.path.dirname(__file__), 'database_config.json'))
+            # Use DATABASE_CONFIG_PATH as per user preference
+            self.config_file = os.environ.get('DATABASE_CONFIG_PATH', 
+                                            os.path.join(os.path.dirname(__file__), 'database_config.json'))
         else:
             self.config_file = config_file
         self.config_data = {"connections": []}
@@ -32,7 +39,11 @@ class DatabaseConfigManager:
         if os.path.exists(self.config_file):
             try:
                 with open(self.config_file, 'r', encoding='utf-8') as f:
-                    self.config_data = json.load(f)
+                    loaded_data = json.load(f)
+                    self.validate_config(loaded_data)
+                    self.config_data = loaded_data
+            except ConfigValidationError:
+                raise
             except Exception as e:
                 print(f"Error loading config file: {e}")
                 # Initialize with default structure
@@ -40,6 +51,58 @@ class DatabaseConfigManager:
         else:
             # Create default config file if it doesn't exist
             self.save_config()
+
+    def validate_config(self, config_data: Dict[str, Any]) -> None:
+        """
+        Validate configuration data.
+        
+        Args:
+            config_data: Configuration data to validate
+            
+        Raises:
+            ConfigValidationError: If configuration is invalid
+        """
+        if not isinstance(config_data, dict):
+            raise ConfigValidationError("Configuration must be a dictionary")
+            
+        if "connections" not in config_data:
+            raise ConfigValidationError("Missing 'connections' key in configuration")
+            
+        if not isinstance(config_data["connections"], list):
+            raise ConfigValidationError("'connections' must be a list")
+            
+        for i, conn in enumerate(config_data.get("connections", [])):
+            self._validate_connection_config(conn, i)
+    
+    def _validate_connection_config(self, conn: Dict[str, Any], index: int) -> None:
+        """
+        Validate a single connection configuration.
+        
+        Args:
+            conn: Connection configuration to validate
+            index: Index of the connection in the list
+            
+        Raises:
+            ConfigValidationError: If connection configuration is invalid
+        """
+        required_fields = ["name", "type", "host", "port", "username", "password", "database"]
+        for field in required_fields:
+            if field not in conn:
+                raise ConfigValidationError(f"Connection {index}: Missing required field '{field}'")
+        
+        # Validate port
+        if not isinstance(conn["port"], int) or not (1 <= conn["port"] <= 65535):
+            raise ConfigValidationError(f"Connection '{conn['name']}': Port must be an integer between 1 and 65535")
+            
+        # Validate type
+        valid_types = ["mysql", "oracle", "postgresql"]
+        if conn["type"].lower() not in valid_types:
+            raise ConfigValidationError(f"Connection '{conn['name']}': Invalid database type '{conn['type']}'. "
+                                      f"Valid types: {valid_types}")
+        
+        # Validate enabled field if present
+        if "enabled" in conn and not isinstance(conn["enabled"], bool):
+            raise ConfigValidationError(f"Connection '{conn['name']}': 'enabled' must be a boolean")
 
     def save_config(self) -> None:
         """Save configuration to file."""
@@ -83,6 +146,13 @@ class DatabaseConfigManager:
         Returns:
             True if added successfully, False otherwise
         """
+        # Validate the connection config
+        try:
+            self._validate_connection_config(connection_config, len(self.get_connections()))
+        except ConfigValidationError as e:
+            print(f"Invalid connection configuration: {e}")
+            return False
+            
         # Check if connection with same name already exists
         connections = self.get_connections()
         for conn in connections:
@@ -105,6 +175,13 @@ class DatabaseConfigManager:
         Returns:
             True if updated successfully, False if connection not found
         """
+        # Validate the connection config
+        try:
+            self._validate_connection_config(connection_config, -1)  # -1 since we don't know the index
+        except ConfigValidationError as e:
+            print(f"Invalid connection configuration: {e}")
+            return False
+            
         connections = self.get_connections()
         for i, conn in enumerate(connections):
             if conn.get("name") == name:

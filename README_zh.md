@@ -1,14 +1,14 @@
 # Yuerenge 数据库 MCP
 
-一个基于模型上下文协议（MCP）的数据库管理工具。
+基于模型上下文协议（MCP）的数据库管理工具。
 
 ## 功能特性
 
-- 支持多种数据库（MySQL、Oracle）
+- 支持多种数据库（MySQL、Oracle、PostgreSQL）
 - 连接管理
 - 表结构操作
 - 数据查询与操作
-- 配置管理
+- 带验证的高级配置管理
 
 ## 安装
 
@@ -18,7 +18,7 @@ pip install yuerenge-database-mcp
 
 ## 使用方法
 
-安装完成后，您可以运行数据库 MCP 服务器：
+安装后，您可以运行数据库 MCP 服务器：
 
 ```bash
 yuerenge-database-mcp
@@ -32,7 +32,23 @@ DATABASE_CONFIG_PATH=/path/to/your/config.json yuerenge-database-mcp
 
 ## 配置
 
-该工具使用 JSON 配置文件来存储数据库连接信息。示例：
+该工具使用 JSON 配置文件来存储数据库连接信息。
+
+配置优先级（从高到低）：
+1. 环境变量 `DATABASE_CONFIG_PATH`
+2. 默认配置文件（`config/database_config.json`）
+
+### 配置验证
+
+配置管理器会验证所有连接配置以确保：
+- 所有必填字段都已填写
+- 端口号有效（1-65535）
+- 数据库类型受支持
+- 启用标志是布尔值
+
+### 连接池设置
+
+您可以为每个数据库连接配置连接池设置：
 
 ```json
 {
@@ -45,11 +61,21 @@ DATABASE_CONFIG_PATH=/path/to/your/config.json yuerenge-database-mcp
       "username": "user",
       "password": "password",
       "database": "mydb",
-      "enabled": true
+      "enabled": true,
+      "pool_size": 5,
+      "max_overflow": 10,
+      "pool_timeout": 30,
+      "pool_recycle": 3600
     }
   ]
 }
 ```
+
+可用的连接池设置：
+- `pool_size`：连接池内保持打开的连接数（默认：10）
+- `max_overflow`：连接池中允许的“溢出”连接数（默认：20）
+- `pool_timeout`：在放弃获取连接之前等待的秒数（默认：30）
+- `pool_recycle`：重新创建空闲连接的秒数（默认：3600）
 
 ## 提供的工具
 

@@ -4,11 +4,11 @@ A database management tool based on the Model Context Protocol (MCP).
 
 ## Features
 
-- Support for multiple databases (MySQL, Oracle)
+- Support for multiple databases (MySQL, Oracle, PostgreSQL)
 - Connection management
 - Table structure operations
 - Data querying and manipulation
-- Configuration management
+- Advanced configuration management with validation
 
 ## Installation
 
@@ -32,7 +32,23 @@ DATABASE_CONFIG_PATH=/path/to/your/config.json yuerenge-database-mcp
 
 ## Configuration
 
-The tool uses a JSON configuration file to store database connection information. Example:
+The tool uses a JSON configuration file to store database connection information. 
+
+Configuration priority (highest to lowest):
+1. Environment variable `DATABASE_CONFIG_PATH`
+2. Default configuration file (`config/database_config.json`)
+
+### Configuration Validation
+
+The configuration manager validates all connection configurations to ensure:
+- All required fields are present
+- Port numbers are valid (1-65535)
+- Database types are supported
+- Enabled flags are boolean values
+
+### Connection Pool Settings
+
+You can configure connection pool settings for each database connection:
 
 ```json
 {
@@ -45,11 +61,21 @@ The tool uses a JSON configuration file to store database connection information
       "username": "user",
       "password": "password",
       "database": "mydb",
-      "enabled": true
+      "enabled": true,
+      "pool_size": 5,
+      "max_overflow": 10,
+      "pool_timeout": 30,
+      "pool_recycle": 3600
     }
   ]
 }
 ```
+
+Available connection pool settings:
+- `pool_size`: The number of connections to keep open inside the connection pool (default: 10)
+- `max_overflow`: The number of connections to allow in connection pool "overflow" (default: 20)
+- `pool_timeout`: The number of seconds to wait before giving up on getting a connection from the pool (default: 30)
+- `pool_recycle`: Number of seconds after which to recreate idle connections (default: 3600)
 
 ## Tools Provided
 
