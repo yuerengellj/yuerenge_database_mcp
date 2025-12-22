@@ -448,3 +448,527 @@ class DataManager:
             })
             
             return None
+
+    def insert_data(self, connection_name: str, table_name: str, data: Dict[str, Any]) -> bool:
+        """
+        Insert data into a specific table.
+
+        Args:
+            connection_name: Name of the database connection
+            table_name: Name of the table
+            data: Dictionary of column-value pairs to insert
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        request_id = self.request_id
+        self.logger.info(f"[Request ID: {request_id}] Inserting data into '{connection_name}.{table_name}'")
+        
+        engine = self.connection_manager.get_connection(connection_name)
+        if not engine:
+            error_msg = f"Connection '{connection_name}' not found"
+            self.logger.error(f"[Request ID: {request_id}] {error_msg}")
+            
+            # Save error log
+            self.log_manager.save_error_log("insert_data_missing_connection", {
+                "connection_name": connection_name,
+                "table_name": table_name,
+                "data": data,
+                "error_message": error_msg
+            })
+            
+            return False
+
+        # Get the appropriate adapter
+        adapter = self.connection_manager.get_adapter(connection_name)
+        if not adapter:
+            error_msg = f"Adapter for connection '{connection_name}' not found"
+            self.logger.error(f"[Request ID: {request_id}] {error_msg}")
+            
+            # Save error log
+            self.log_manager.save_error_log("insert_data_missing_adapter", {
+                "connection_name": connection_name,
+                "table_name": table_name,
+                "data": data,
+                "error_message": error_msg
+            })
+            
+            return False
+
+        try:
+            # Process data for datetime objects
+            processed_data = {}
+            for key, value in data.items():
+                # Handle datetime objects and datetime strings
+                if isinstance(value, datetime):
+                    processed_data[key] = value
+                elif isinstance(value, str):
+                    # For Oracle, check if string looks like a datetime
+                    if "oracle" in engine.url.drivername and is_datetime_string(value):
+                        # Treat as datetime string for Oracle
+                        processed_data[key] = value
+                    else:
+                        processed_data[key] = value
+                else:
+                    processed_data[key] = value
+
+            # Use adapter to generate INSERT query and parameters
+            query, params = adapter.get_insert_query(table_name, processed_data)
+            self.logger.debug(f"[Request ID: {request_id}] Insert query: {query}")
+
+            with engine.connect() as conn:
+                trans = conn.begin()
+                try:
+                    # For Oracle, we may need special handling
+                    if "oracle" in engine.url.drivername:
+                        # Handle Oracle datetime values by modifying the query
+                        if any(is_datetime_string(str(v)) for v in params.values()):
+                            # Reconstruct query with TO_DATE functions for datetime strings
+                            columns = list(params.keys())
+                            formatted_values = []
+                            new_params = {}
+                            
+                            for i, (key, value) in enumerate(params.items()):
+                                if isinstance(value, str) and is_datetime_string(value):
+                                    if ' ' in value:
+                                        # DateTime format
+                                        formatted_values.append(f"TO_DATE(:{key}, 'YYYY-MM-DD HH24:MI:SS')")
+                                    else:
+                                        # Date only format
+                                        formatted_values.append(f"TO_DATE(:{key}, 'YYYY-MM-DD')")
+                                    new_params[key] = value
+                                else:
+                                    formatted_values.append(f":{key}")
+                                    new_params[key] = value
+                                    
+                            columns_str = ", ".join(columns)
+                            values_str = ", ".join(formatted_values)
+                            query = f"INSERT INTO {table_name.upper()} ({columns_str}) VALUES ({values_str})"
+                            conn.execute(text(query), new_params)
+                        else:
+                            conn.execute(text(query), params)
+                    else:
+                        conn.execute(text(query), params)
+                    trans.commit()
+                    self.logger.info(f"[Request ID: {request_id}] Successfully inserted data into '{connection_name}.{table_name}'")
+                    return True
+                except Exception as e:
+                    trans.rollback()
+                    raise e
+
+        except SQLAlchemyError as e:
+            error_details = {
+                "connection_name": connection_name,
+                "table_name": table_name,
+                "data": data,
+                "error": str(e),
+                "traceback": traceback.format_exc()
+            }
+            self.logger.error(f"[Request ID: {request_id}] SQLAlchemy error inserting data into '{connection_name}.{table_name}': {str(e)}", extra=error_details)
+            
+            # Save error log
+            self.log_manager.save_error_log("insert_data_sqlalchemy_error", {
+                "connection_name": connection_name,
+                "table_name": table_name,
+                "data": data,
+                "error_message": str(e),
+                "error_details": error_details
+            })
+            
+            return False
+        except Exception as e:
+            error_details = {
+                "connection_name": connection_name,
+                "table_name": table_name,
+                "data": data,
+                "error": str(e),
+                "traceback": traceback.format_exc()
+            }
+            self.logger.error(f"[Request ID: {request_id}] Unexpected error inserting data into '{connection_name}.{table_name}': {str(e)}", extra=error_details)
+            
+            # Save error log
+            self.log_manager.save_error_log("insert_data_unexpected_error", {
+                "connection_name": connection_name,
+                "table_name": table_name,
+                "data": data,
+                "error_message": str(e),
+                "error_details": error_details
+            })
+            
+            return False
+
+    def update_data(self, connection_name: str, table_name: str, data: Dict[str, Any],
+                    conditions: Optional[Dict[str, Any]] = None) -> int:
+        """
+        Update data in a specific table.
+
+        Args:
+            connection_name: Name of the database connection
+            table_name: Name of the table
+            data: Dictionary of column-value pairs to update
+            conditions: Optional dictionary of column-value pairs for WHERE clause
+
+        Returns:
+            int: Number of rows affected, -1 if error occurred
+        """
+        request_id = self.request_id
+        self.logger.info(f"[Request ID: {request_id}] Updating data in '{connection_name}.{table_name}'")
+        
+        engine = self.connection_manager.get_connection(connection_name)
+        if not engine:
+            error_msg = f"Connection '{connection_name}' not found"
+            self.logger.error(f"[Request ID: {request_id}] {error_msg}")
+            
+            # Save error log
+            self.log_manager.save_error_log("update_data_missing_connection", {
+                "connection_name": connection_name,
+                "table_name": table_name,
+                "data": data,
+                "conditions": conditions,
+                "error_message": error_msg
+            })
+            
+            return -1
+
+        # Get the appropriate adapter
+        adapter = self.connection_manager.get_adapter(connection_name)
+        if not adapter:
+            error_msg = f"Adapter for connection '{connection_name}' not found"
+            self.logger.error(f"[Request ID: {request_id}] {error_msg}")
+            
+            # Save error log
+            self.log_manager.save_error_log("update_data_missing_adapter", {
+                "connection_name": connection_name,
+                "table_name": table_name,
+                "data": data,
+                "conditions": conditions,
+                "error_message": error_msg
+            })
+            
+            return -1
+
+        try:
+            # Use adapter to generate UPDATE query and parameters
+            query, params = adapter.get_update_query(table_name, data, conditions)
+            self.logger.debug(f"[Request ID: {request_id}] Update query: {query}")
+
+            with engine.connect() as conn:
+                trans = conn.begin()
+                try:
+                    result = conn.execute(text(query), params)
+                    trans.commit()
+                    rows_affected = result.rowcount
+                    self.logger.info(f"[Request ID: {request_id}] Successfully updated {rows_affected} rows in '{connection_name}.{table_name}'")
+                    return rows_affected
+                except Exception as e:
+                    trans.rollback()
+                    raise e
+
+        except SQLAlchemyError as e:
+            error_details = {
+                "connection_name": connection_name,
+                "table_name": table_name,
+                "data": data,
+                "conditions": conditions,
+                "error": str(e),
+                "traceback": traceback.format_exc()
+            }
+            self.logger.error(f"[Request ID: {request_id}] SQLAlchemy error updating data in '{connection_name}.{table_name}': {str(e)}", extra=error_details)
+            
+            # Save error log
+            self.log_manager.save_error_log("update_data_sqlalchemy_error", {
+                "connection_name": connection_name,
+                "table_name": table_name,
+                "data": data,
+                "conditions": conditions,
+                "error_message": str(e),
+                "error_details": error_details
+            })
+            
+            return -1
+        except Exception as e:
+            error_details = {
+                "connection_name": connection_name,
+                "table_name": table_name,
+                "data": data,
+                "conditions": conditions,
+                "error": str(e),
+                "traceback": traceback.format_exc()
+            }
+            self.logger.error(f"[Request ID: {request_id}] Unexpected error updating data in '{connection_name}.{table_name}': {str(e)}", extra=error_details)
+            
+            # Save error log
+            self.log_manager.save_error_log("update_data_unexpected_error", {
+                "connection_name": connection_name,
+                "table_name": table_name,
+                "data": data,
+                "conditions": conditions,
+                "error_message": str(e),
+                "error_details": error_details
+            })
+            
+            return -1
+
+    def delete_data(self, connection_name: str, table_name: str,
+                    conditions: Optional[Dict[str, Any]] = None) -> int:
+        """
+        Delete data from a specific table.
+
+        Args:
+            connection_name: Name of the database connection
+            table_name: Name of the table
+            conditions: Optional dictionary of column-value pairs for WHERE clause
+
+        Returns:
+            int: Number of rows affected, -1 if error occurred
+        """
+        request_id = self.request_id
+        self.logger.info(f"[Request ID: {request_id}] Deleting data from '{connection_name}.{table_name}'")
+        
+        engine = self.connection_manager.get_connection(connection_name)
+        if not engine:
+            error_msg = f"Connection '{connection_name}' not found"
+            self.logger.error(f"[Request ID: {request_id}] {error_msg}")
+            
+            # Save error log
+            self.log_manager.save_error_log("delete_data_missing_connection", {
+                "connection_name": connection_name,
+                "table_name": table_name,
+                "conditions": conditions,
+                "error_message": error_msg
+            })
+            
+            return -1
+
+        # Get the appropriate adapter
+        adapter = self.connection_manager.get_adapter(connection_name)
+        if not adapter:
+            error_msg = f"Adapter for connection '{connection_name}' not found"
+            self.logger.error(f"[Request ID: {request_id}] {error_msg}")
+            
+            # Save error log
+            self.log_manager.save_error_log("delete_data_missing_adapter", {
+                "connection_name": connection_name,
+                "table_name": table_name,
+                "conditions": conditions,
+                "error_message": error_msg
+            })
+            
+            return -1
+
+        try:
+            # Use adapter to generate DELETE query and parameters
+            query, params = adapter.get_delete_query(table_name, conditions)
+            self.logger.debug(f"[Request ID: {request_id}] Delete query: {query}")
+
+            with engine.connect() as conn:
+                trans = conn.begin()
+                try:
+                    result = conn.execute(text(query), params)
+                    trans.commit()
+                    rows_affected = result.rowcount
+                    self.logger.info(f"[Request ID: {request_id}] Successfully deleted {rows_affected} rows from '{connection_name}.{table_name}'")
+                    return rows_affected
+                except Exception as e:
+                    trans.rollback()
+                    raise e
+
+        except SQLAlchemyError as e:
+            error_details = {
+                "connection_name": connection_name,
+                "table_name": table_name,
+                "conditions": conditions,
+                "error": str(e),
+                "traceback": traceback.format_exc()
+            }
+            self.logger.error(f"[Request ID: {request_id}] SQLAlchemy error deleting data from '{connection_name}.{table_name}': {str(e)}", extra=error_details)
+            
+            # Save error log
+            self.log_manager.save_error_log("delete_data_sqlalchemy_error", {
+                "connection_name": connection_name,
+                "table_name": table_name,
+                "conditions": conditions,
+                "error_message": str(e),
+                "error_details": error_details
+            })
+            
+            return -1
+        except Exception as e:
+            error_details = {
+                "connection_name": connection_name,
+                "table_name": table_name,
+                "conditions": conditions,
+                "error": str(e),
+                "traceback": traceback.format_exc()
+            }
+            self.logger.error(f"[Request ID: {request_id}] Unexpected error deleting data from '{connection_name}.{table_name}': {str(e)}", extra=error_details)
+            
+            # Save error log
+            self.log_manager.save_error_log("delete_data_unexpected_error", {
+                "connection_name": connection_name,
+                "table_name": table_name,
+                "conditions": conditions,
+                "error_message": str(e),
+                "error_details": error_details
+            })
+            
+            return -1
+
+    def batch_insert_data(self, connection_name: str, table_name: str, 
+                        data_list: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Insert multiple records into a specific table.
+        
+        Args:
+            connection_name: Name of the database connection
+            table_name: Name of the table
+            data_list: List of dictionaries containing column-value pairs to insert
+            
+        Returns:
+            Dict containing success count, failure count, and details of failures
+        """
+        request_id = self.request_id
+        self.logger.info(f"[Request ID: {request_id}] Batch inserting {len(data_list)} records into '{connection_name}.{table_name}'")
+        
+        successes = 0
+        failures = 0
+        failed_records = []
+        
+        for i, data in enumerate(data_list):
+            try:
+                result = self.insert_data(connection_name, table_name, data)
+                if result:
+                    successes += 1
+                else:
+                    failures += 1
+                    failed_records.append({
+                        "index": i,
+                        "data": data,
+                        "error": "Insert operation returned False"
+                    })
+            except Exception as e:
+                failures += 1
+                failed_records.append({
+                    "index": i,
+                    "data": data,
+                    "error": str(e)
+                })
+                
+        self.logger.info(f"[Request ID: {request_id}] Batch insert completed: {successes} succeeded, {failures} failed")
+        
+        return {
+            "success_count": successes,
+            "failure_count": failures,
+            "failed_records": failed_records
+        }
+
+    def batch_update_data(self, connection_name: str, table_name: str,
+                         data_list: List[Dict[str, Any]], 
+                         conditions_list: List[Optional[Dict[str, Any]]]) -> Dict[str, Any]:
+        """
+        Update multiple records in a specific table.
+        
+        Args:
+            connection_name: Name of the database connection
+            table_name: Name of the table
+            data_list: List of dictionaries containing column-value pairs to update
+            conditions_list: List of dictionaries containing WHERE clause conditions for each update
+            
+        Returns:
+            Dict containing success count, failure count, and details of failures
+        """
+        request_id = self.request_id
+        self.logger.info(f"[Request ID: {request_id}] Batch updating {len(data_list)} records in '{connection_name}.{table_name}'")
+        
+        if len(data_list) != len(conditions_list):
+            error_msg = "Data list and conditions list must have the same length"
+            self.logger.error(f"[Request ID: {request_id}] {error_msg}")
+            raise ValueError(error_msg)
+        
+        successes = 0
+        failures = 0
+        failed_records = []
+        total_affected_rows = 0
+        
+        for i, (data, conditions) in enumerate(zip(data_list, conditions_list)):
+            try:
+                affected_rows = self.update_data(connection_name, table_name, data, conditions)
+                if affected_rows >= 0:
+                    successes += 1
+                    total_affected_rows += affected_rows
+                else:
+                    failures += 1
+                    failed_records.append({
+                        "index": i,
+                        "data": data,
+                        "conditions": conditions,
+                        "error": "Update operation returned negative value"
+                    })
+            except Exception as e:
+                failures += 1
+                failed_records.append({
+                    "index": i,
+                    "data": data,
+                    "conditions": conditions,
+                    "error": str(e)
+                })
+                
+        self.logger.info(f"[Request ID: {request_id}] Batch update completed: {successes} succeeded, {failures} failed, {total_affected_rows} total rows affected")
+        
+        return {
+            "success_count": successes,
+            "failure_count": failures,
+            "total_affected_rows": total_affected_rows,
+            "failed_records": failed_records
+        }
+
+    def batch_delete_data(self, connection_name: str, table_name: str,
+                         conditions_list: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Delete multiple records from a specific table.
+        
+        Args:
+            connection_name: Name of the database connection
+            table_name: Name of the table
+            conditions_list: List of dictionaries containing WHERE clause conditions for each delete
+            
+        Returns:
+            Dict containing success count, failure count, and details of failures
+        """
+        request_id = self.request_id
+        self.logger.info(f"[Request ID: {request_id}] Batch deleting records from '{connection_name}.{table_name}'")
+        
+        successes = 0
+        failures = 0
+        failed_records = []
+        total_affected_rows = 0
+        
+        for i, conditions in enumerate(conditions_list):
+            try:
+                affected_rows = self.delete_data(connection_name, table_name, conditions)
+                if affected_rows >= 0:
+                    successes += 1
+                    total_affected_rows += affected_rows
+                else:
+                    failures += 1
+                    failed_records.append({
+                        "index": i,
+                        "conditions": conditions,
+                        "error": "Delete operation returned negative value"
+                    })
+            except Exception as e:
+                failures += 1
+                failed_records.append({
+                    "index": i,
+                    "conditions": conditions,
+                    "error": str(e)
+                })
+                
+        self.logger.info(f"[Request ID: {request_id}] Batch delete completed: {successes} succeeded, {failures} failed, {total_affected_rows} total rows affected")
+        
+        return {
+            "success_count": successes,
+            "failure_count": failures,
+            "total_affected_rows": total_affected_rows,
+            "failed_records": failed_records
+        }

@@ -68,6 +68,15 @@ class DatabaseManager:
     def delete_data(self, *args, **kwargs):
         return self.data_manager.delete_data(*args, **kwargs)
 
+    def batch_insert_data(self, *args, **kwargs):
+        return self.data_manager.batch_insert_data(*args, **kwargs)
+
+    def batch_update_data(self, *args, **kwargs):
+        return self.data_manager.batch_update_data(*args, **kwargs)
+
+    def batch_delete_data(self, *args, **kwargs):
+        return self.data_manager.batch_delete_data(*args, **kwargs)
+
     # Formatting methods (delegated to FormatManager)
     def format_as_table(self, *args, **kwargs):
         return self.format_manager.format_as_table(*args, **kwargs)

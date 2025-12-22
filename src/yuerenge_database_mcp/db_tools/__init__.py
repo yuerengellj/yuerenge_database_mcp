@@ -6,6 +6,7 @@ from .table_manager import TableManager
 from .database_manager import DatabaseManager
 from .format_manager import FormatManager
 from .log_manager import LogManager
+from .async_data_manager import AsyncDataManager
 
 __all__ = [
     'ConnectionManager',
@@ -13,5 +14,6 @@ __all__ = [
     'TableManager',
     'DatabaseManager',
     'FormatManager',
-    'LogManager'
+    'LogManager',
+    'AsyncDataManager'
 ]

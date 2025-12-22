@@ -61,8 +61,11 @@ from .db_tools.db_tools import (
     select_data,
     # 5. Data Manipulation Tools
     insert_data,
+    batch_insert_data,
     update_data,
+    batch_update_data,
     delete_data,
+    batch_delete_data,
     # 6. Advanced Query Tools
     select_data_smart,
     select_data_paged,
@@ -99,8 +102,11 @@ mcp.add_tool(select_data)
 
 # 5. Data Manipulation Tools
 mcp.add_tool(insert_data)
+mcp.add_tool(batch_insert_data)
 mcp.add_tool(update_data)
+mcp.add_tool(batch_update_data)
 mcp.add_tool(delete_data)
+mcp.add_tool(batch_delete_data)
 
 # 6. Advanced Query Tools
 mcp.add_tool(select_data_smart)

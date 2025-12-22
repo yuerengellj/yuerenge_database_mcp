@@ -59,16 +59,6 @@ class DatabaseAdapter(ABC):
         pass
 
     @abstractmethod
-    def get_count_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
-        """Generate COUNT query and parameters for pagination."""
-        pass
-
-    @abstractmethod
-    def get_paginated_select_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
-        """Generate paginated SELECT query and parameters."""
-        pass
-
-    @abstractmethod
     def get_insert_query(self, table_name: str, data: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
         """Generate INSERT query and parameters."""
         pass
@@ -82,6 +72,16 @@ class DatabaseAdapter(ABC):
     @abstractmethod
     def get_delete_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
         """Generate DELETE query and parameters."""
+        pass
+
+    @abstractmethod
+    def get_count_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
+        """Generate COUNT query and parameters for pagination."""
+        pass
+
+    @abstractmethod
+    def get_paginated_select_query(self, table_name: str, conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
+        """Generate paginated SELECT query and parameters."""
         pass
 
 
@@ -479,10 +479,41 @@ class OracleAdapter(DatabaseAdapter):
         return query, params
 
     def get_insert_query(self, table_name: str, data: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
-        columns = ", ".join([k for k in data.keys()])
-        placeholders = ", ".join([f":{k}" for k in data.keys()])
+        # For Oracle, we need to handle datetime values specially
+        processed_data = {}
+        datetime_columns = []
+        
+        for key, value in data.items():
+            # Check if it's a datetime string
+            if isinstance(value, str) and self._is_datetime_string(value):
+                datetime_columns.append(key)
+                # For Oracle, we'll handle datetime values in the query itself
+                processed_data[key] = value
+            else:
+                processed_data[key] = value
+        
+        columns = ", ".join([k for k in processed_data.keys()])
+        placeholders = ", ".join([f":{k}" for k in processed_data.keys()])
         query = f"INSERT INTO {table_name.upper()} ({columns}) VALUES ({placeholders})"
-        return query, data
+        return query, processed_data
+
+    def _is_datetime_string(self, value: str) -> bool:
+        """
+        Check if a string represents a datetime in format YYYY-MM-DD or YYYY-MM-DD HH:MM:SS
+
+        Args:
+            value: String to check
+
+        Returns:
+            bool: True if string matches datetime format, False otherwise
+        """
+        import re
+        if not isinstance(value, str):
+            return False
+
+        # Pattern for date only (YYYY-MM-DD) or date with time (YYYY-MM-DD HH:MM:SS)
+        datetime_pattern = r"^\d{4}-\d{2}-\d{2}( \d{2}:\d{2}:\d{2})?$"
+        return bool(re.match(datetime_pattern, value))
 
     def get_update_query(self, table_name: str, data: Dict[str, Any], 
                         conditions: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:

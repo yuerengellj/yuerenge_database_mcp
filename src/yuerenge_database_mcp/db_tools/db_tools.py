@@ -333,6 +333,22 @@ def insert_data(connection_name: str, table_name: str, data: Dict[str, Any]) -> 
 
 
 @mcp.tool()
+def batch_insert_data(connection_name: str, table_name: str, data_list: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Insert multiple records into a specific table.
+    
+    Args:
+        connection_name: Name of the database connection
+        table_name: Name of the table
+        data_list: List of dictionaries containing column-value pairs to insert
+        
+    Returns:
+        Dict containing success count, failure count, and details of failures
+    """
+    return db_manager.batch_insert_data(connection_name, table_name, data_list)
+
+
+@mcp.tool()
 def update_data(connection_name: str, table_name: str, data: Dict[str, Any], 
                conditions: Optional[Dict[str, Any]] = None) -> int:
     """
@@ -351,6 +367,24 @@ def update_data(connection_name: str, table_name: str, data: Dict[str, Any],
 
 
 @mcp.tool()
+def batch_update_data(connection_name: str, table_name: str, data_list: List[Dict[str, Any]], 
+                     conditions_list: List[Optional[Dict[str, Any]]]) -> Dict[str, Any]:
+    """
+    Update multiple records in a specific table.
+    
+    Args:
+        connection_name: Name of the database connection
+        table_name: Name of the table
+        data_list: List of dictionaries containing column-value pairs to update
+        conditions_list: List of dictionaries containing WHERE clause conditions for each update
+        
+    Returns:
+        Dict containing success count, failure count, and details of failures
+    """
+    return db_manager.batch_update_data(connection_name, table_name, data_list, conditions_list)
+
+
+@mcp.tool()
 def delete_data(connection_name: str, table_name: str, 
                conditions: Optional[Dict[str, Any]] = None) -> int:
     """
@@ -366,6 +400,22 @@ def delete_data(connection_name: str, table_name: str,
     """
     return db_manager.delete_data(connection_name, table_name, conditions)
 
+
+@mcp.tool()
+def batch_delete_data(connection_name: str, table_name: str, 
+                     conditions_list: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Delete multiple records from a specific table.
+    
+    Args:
+        connection_name: Name of the database connection
+        table_name: Name of the table
+        conditions_list: List of dictionaries containing WHERE clause conditions for each delete
+        
+    Returns:
+        Dict containing success count, failure count, and details of failures
+    """
+    return db_manager.batch_delete_data(connection_name, table_name, conditions_list)
 
 # =============================================================================
 # 6. 高级查询工具 (Advanced Query Tools)
