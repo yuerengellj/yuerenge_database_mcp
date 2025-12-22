@@ -631,7 +631,7 @@ wheels = [
 
 [[package]]
 name = "yuerenge-database-mcp"
-version = "0.1.2"
+version = "0.1.4"
 source = { editable = "." }
 dependencies = [
     { name = "mcp", extra = ["cli"] },
