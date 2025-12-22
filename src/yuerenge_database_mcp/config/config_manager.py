@@ -85,20 +85,31 @@ class DatabaseConfigManager:
         Raises:
             ConfigValidationError: If connection configuration is invalid
         """
-        required_fields = ["name", "type", "host", "port", "username", "password", "database"]
+        required_fields = ["name", "type"]
         for field in required_fields:
             if field not in conn:
                 raise ConfigValidationError(f"Connection {index}: Missing required field '{field}'")
         
-        # Validate port
-        if not isinstance(conn["port"], int) or not (1 <= conn["port"] <= 65535):
-            raise ConfigValidationError(f"Connection '{conn['name']}': Port must be an integer between 1 and 65535")
-            
         # Validate type
-        valid_types = ["mysql", "oracle", "postgresql"]
+        valid_types = ["mysql", "oracle", "postgresql", "sqlite", "sqlserver"]
         if conn["type"].lower() not in valid_types:
             raise ConfigValidationError(f"Connection '{conn['name']}': Invalid database type '{conn['type']}'. "
                                       f"Valid types: {valid_types}")
+        
+        # For non-SQLite databases, we need more fields
+        if conn["type"].lower() != "sqlite":
+            extra_required_fields = ["host", "port", "username", "password", "database"]
+            for field in extra_required_fields:
+                if field not in conn:
+                    raise ConfigValidationError(f"Connection '{conn['name']}': Missing required field '{field}' for {conn['type']} database")
+            
+            # Validate port for non-SQLite databases
+            if not isinstance(conn["port"], int) or not (1 <= conn["port"] <= 65535):
+                raise ConfigValidationError(f"Connection '{conn['name']}': Port must be an integer between 1 and 65535")
+        else:
+            # For SQLite, we only need the database file path
+            if "database" not in conn:
+                raise ConfigValidationError(f"Connection '{conn['name']}': Missing required field 'database' for SQLite")
         
         # Validate enabled field if present
         if "enabled" in conn and not isinstance(conn["enabled"], bool):

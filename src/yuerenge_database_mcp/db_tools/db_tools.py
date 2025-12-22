@@ -44,7 +44,7 @@ def add_database_connection(
     
     Args:
         name: Connection identifier (must be unique)
-        db_type: Type of database (mysql, oracle)
+        db_type: Type of database (mysql, oracle, postgresql, sqlite, sqlserver)
         host: Database host
         port: Database port
         username: Database username

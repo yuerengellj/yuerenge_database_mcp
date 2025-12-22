@@ -8,12 +8,15 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
+from .database_adapters import get_database_adapter
+
 
 class ConnectionManager:
     """Manages database connections."""
 
     def __init__(self):
         self.connections: Dict[str, Engine] = {}
+        self.adapters: Dict[str, Any] = {}  # Store adapters for each connection
         self.logger = logging.getLogger(__name__)
 
     def add_connection(
@@ -55,32 +58,25 @@ class ConnectionManager:
             # Add any remaining kwargs as additional engine options
             engine_options = {**pool_settings, **kwargs}
             
-            # Create connection string based on database type
-            if db_type.lower() == "mysql":
-                connection_string = (
-                    f"mysql+pymysql://{username}:{password}@{host}:{port}/{database}"
-                )
-            elif db_type.lower() == "oracle":
-                # Try service_name format first (works for Oracle 19c)
-                connection_string = (
-                    f"oracle+oracledb://{username}:{password}@{host}:{port}/?service_name={database}"
-                )
-            elif db_type.lower() == "postgresql":
-                connection_string = (
-                    f"postgresql+psycopg2://{username}:{password}@{host}:{port}/{database}"
-                )
-            else:
-                raise ValueError(f"Unsupported database type: {db_type}")
+            # Get the appropriate adapter
+            adapter = get_database_adapter(db_type)
+            
+            # Create connection string using adapter
+            connection_string = adapter.get_connection_string(
+                host, port, username, password, database
+            )
 
             # Create engine with additional options
             engine = create_engine(connection_string, **engine_options)
 
-            # Test connection
+            # Test connection using adapter-specific test query
+            test_query = adapter.get_test_query()
             with engine.connect() as conn:
-                conn.execute(text("SELECT 1 FROM dual" if db_type.lower() == "oracle" else "SELECT 1"))
+                conn.execute(text(test_query))
 
-            # Store connection
+            # Store connection and adapter
             self.connections[name] = engine
+            self.adapters[name] = adapter
             self.logger.info(f"Successfully connected to {db_type} database '{name}'")
             return True
 
@@ -102,6 +98,8 @@ class ConnectionManager:
             try:
                 self.connections[name].dispose()
                 del self.connections[name]
+                if name in self.adapters:
+                    del self.adapters[name]
                 self.logger.info(f"Removed database connection '{name}'")
                 return True
             except Exception as e:
@@ -163,6 +161,18 @@ class ConnectionManager:
         """
         return self.connections.get(name)
 
+    def get_adapter(self, name: str) -> Optional[Any]:
+        """
+        Get a database adapter by name.
+
+        Args:
+            name: Connection identifier
+
+        Returns:
+            DatabaseAdapter: Database adapter or None if not found
+        """
+        return self.adapters.get(name)
+
     def list_connections(self) -> Dict[str, str]:
         """
         List all connection names and their database types.
@@ -186,3 +196,4 @@ class ConnectionManager:
             except Exception as e:
                 self.logger.error(f"Error disposing connection '{name}': {str(e)}")
         self.connections.clear()
+        self.adapters.clear()

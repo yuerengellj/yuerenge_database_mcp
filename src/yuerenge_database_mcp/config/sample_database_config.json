@@ -1,0 +1,63 @@
+{
+  "connections": [
+    {
+      "name": "mysql_db",
+      "type": "mysql",
+      "host": "localhost",
+      "port": 3306,
+      "username": "user",
+      "password": "password",
+      "database": "mydb",
+      "enabled": true,
+      "pool_size": 5,
+      "max_overflow": 10,
+      "pool_timeout": 30,
+      "pool_recycle": 3600
+    },
+    {
+      "name": "postgres_db",
+      "type": "postgresql",
+      "host": "localhost",
+      "port": 5432,
+      "username": "user",
+      "password": "password",
+      "database": "mydb",
+      "enabled": false,
+      "pool_size": 10,
+      "max_overflow": 20,
+      "pool_timeout": 30
+    },
+    {
+      "name": "oracle_db",
+      "type": "oracle",
+      "host": "localhost",
+      "port": 1521,
+      "username": "user",
+      "password": "password",
+      "database": "ORCL",
+      "enabled": true
+    },
+    {
+      "name": "sqlite_db",
+      "type": "sqlite",
+      "database": "/path/to/database.sqlite",
+      "enabled": true
+    },
+    {
+      "name": "sqlserver_db",
+      "type": "sqlserver",
+      "host": "localhost",
+      "port": 1433,
+      "username": "user",
+      "password": "password",
+      "database": "mydb",
+      "enabled": false
+    }
+  ],
+  "default_settings": {
+    "pool_size": 10,
+    "max_overflow": 20,
+    "pool_timeout": 30,
+    "pool_recycle": 3600
+  }
+}

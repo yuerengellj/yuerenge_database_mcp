@@ -4,11 +4,12 @@
 
 ## 功能特性
 
-- 支持多种数据库（MySQL、Oracle、PostgreSQL）
+- 支持多种数据库（MySQL、Oracle、PostgreSQL、SQLite、SQL Server）
 - 连接管理
 - 表结构操作
 - 数据查询与操作
 - 带验证的高级配置管理
+- 数据库适配器模式便于扩展
 
 ## 安装
 
@@ -46,6 +47,14 @@ DATABASE_CONFIG_PATH=/path/to/your/config.json yuerenge-database-mcp
 - 数据库类型受支持
 - 启用标志是布尔值
 
+### 支持的数据库类型
+
+- MySQL
+- Oracle
+- PostgreSQL
+- SQLite
+- SQL Server
+
 ### 连接池设置
 
 您可以为每个数据库连接配置连接池设置：
@@ -73,7 +82,7 @@ DATABASE_CONFIG_PATH=/path/to/your/config.json yuerenge-database-mcp
 
 可用的连接池设置：
 - `pool_size`：连接池内保持打开的连接数（默认：10）
-- `max_overflow`：连接池中允许的“溢出”连接数（默认：20）
+- `max_overflow`：连接池中允许的"溢出"连接数（默认：20）
 - `pool_timeout`：在放弃获取连接之前等待的秒数（默认：30）
 - `pool_recycle`：重新创建空闲连接的秒数（默认：3600）
 

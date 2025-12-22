@@ -4,11 +4,12 @@ A database management tool based on the Model Context Protocol (MCP).
 
 ## Features
 
-- Support for multiple databases (MySQL, Oracle, PostgreSQL)
+- Support for multiple databases (MySQL, Oracle, PostgreSQL, SQLite, SQL Server)
 - Connection management
 - Table structure operations
 - Data querying and manipulation
 - Advanced configuration management with validation
+- Database adapter pattern for easy extension
 
 ## Installation
 
@@ -45,6 +46,14 @@ The configuration manager validates all connection configurations to ensure:
 - Port numbers are valid (1-65535)
 - Database types are supported
 - Enabled flags are boolean values
+
+### Supported Database Types
+
+- MySQL
+- Oracle
+- PostgreSQL
+- SQLite
+- SQL Server
 
 ### Connection Pool Settings
 
