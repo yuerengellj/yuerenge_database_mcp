@@ -3,12 +3,19 @@ Connection Manager for handling database connections.
 """
 
 import logging
+import traceback
+import uuid
+import os
+import json
+from datetime import datetime
 from typing import Dict, Any, Optional, List, Tuple
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
 from .database_adapters import get_database_adapter
+from .exceptions import DatabaseConnectionError, ConfigurationError
+from .log_manager import get_log_manager
 
 
 class ConnectionManager:
@@ -18,6 +25,8 @@ class ConnectionManager:
         self.connections: Dict[str, Engine] = {}
         self.adapters: Dict[str, Any] = {}  # Store adapters for each connection
         self.logger = logging.getLogger(__name__)
+        self.request_id = str(uuid.uuid4())
+        self.log_manager = get_log_manager()
 
     def add_connection(
             self,
@@ -46,6 +55,10 @@ class ConnectionManager:
         Returns:
             bool: True if connection successful, False otherwise
         """
+        request_id = kwargs.get('request_id', self.request_id)
+        # Remove request_id from kwargs as it shouldn't be passed to create_engine
+        kwargs.pop('request_id', None)
+        
         try:
             # Extract connection pool settings from kwargs or use defaults
             pool_settings = {
@@ -66,6 +79,9 @@ class ConnectionManager:
                 host, port, username, password, database
             )
 
+            # Log connection attempt
+            self.logger.info(f"[Request ID: {request_id}] Attempting to connect to {db_type} database '{name}' at {host}:{port}")
+            
             # Create engine with additional options
             engine = create_engine(connection_string, **engine_options)
 
@@ -77,11 +93,46 @@ class ConnectionManager:
             # Store connection and adapter
             self.connections[name] = engine
             self.adapters[name] = adapter
-            self.logger.info(f"Successfully connected to {db_type} database '{name}'")
+            self.logger.info(f"[Request ID: {request_id}] Successfully connected to {db_type} database '{name}'")
             return True
 
+        except SQLAlchemyError as e:
+            error_details = {
+                "db_type": db_type,
+                "host": host,
+                "port": port,
+                "database": database,
+                "error": str(e),
+                "traceback": traceback.format_exc()
+            }
+            self.logger.error(f"[Request ID: {request_id}] Database connection error for '{name}': {str(e)}", extra=error_details)
+            
+            # Save error log
+            self.log_manager.save_error_log("connection_error", {
+                "connection_name": name,
+                "error_message": str(e),
+                "error_details": error_details
+            })
+            
+            return False
         except Exception as e:
-            self.logger.error(f"Failed to connect to database '{name}': {str(e)}")
+            error_details = {
+                "db_type": db_type,
+                "host": host,
+                "port": port,
+                "database": database,
+                "error": str(e),
+                "traceback": traceback.format_exc()
+            }
+            self.logger.error(f"[Request ID: {request_id}] Unexpected error connecting to database '{name}': {str(e)}", extra=error_details)
+            
+            # Save error log
+            self.log_manager.save_error_log("connection_unexpected_error", {
+                "connection_name": name,
+                "error_message": str(e),
+                "error_details": error_details
+            })
+            
             return False
 
     def remove_connection(self, name: str) -> bool:
@@ -94,16 +145,30 @@ class ConnectionManager:
         Returns:
             bool: True if removed, False if not found
         """
+        request_id = self.request_id
         if name in self.connections:
             try:
                 self.connections[name].dispose()
                 del self.connections[name]
                 if name in self.adapters:
                     del self.adapters[name]
-                self.logger.info(f"Removed database connection '{name}'")
+                self.logger.info(f"[Request ID: {request_id}] Removed database connection '{name}'")
                 return True
             except Exception as e:
-                self.logger.error(f"Error disposing connection '{name}': {str(e)}")
+                error_details = {
+                    "connection_name": name,
+                    "error": str(e),
+                    "traceback": traceback.format_exc()
+                }
+                self.logger.error(f"[Request ID: {request_id}] Error disposing connection '{name}': {str(e)}", extra=error_details)
+                
+                # Save error log
+                self.log_manager.save_error_log("remove_connection_error", {
+                    "connection_name": name,
+                    "error_message": str(e),
+                    "error_details": error_details
+                })
+                
                 return False
         return False
 
@@ -117,6 +182,7 @@ class ConnectionManager:
         Returns:
             Dict mapping connection names to connection success status
         """
+        request_id = self.request_id
         results = {}
         for conn_config in config_connections:
             # Skip disabled connections
@@ -125,6 +191,8 @@ class ConnectionManager:
 
             name = conn_config["name"]
             try:
+                self.logger.info(f"[Request ID: {request_id}] Initializing connection '{name}' from config")
+                
                 # Extract connection parameters
                 connection_params = {
                     "name": name,
@@ -133,7 +201,8 @@ class ConnectionManager:
                     "port": conn_config["port"],
                     "username": conn_config["username"],
                     "password": conn_config["password"],
-                    "database": conn_config["database"]
+                    "database": conn_config["database"],
+                    "request_id": request_id
                 }
                 
                 # Add optional connection pool parameters
@@ -144,8 +213,28 @@ class ConnectionManager:
                 
                 success = self.add_connection(**connection_params)
                 results[name] = success
+                
+                if success:
+                    self.logger.info(f"[Request ID: {request_id}] Successfully initialized connection '{name}'")
+                else:
+                    self.logger.error(f"[Request ID: {request_id}] Failed to initialize connection '{name}'")
+                    
             except Exception as e:
-                self.logger.error(f"Failed to initialize connection '{name}': {str(e)}")
+                error_details = {
+                    "connection_name": name,
+                    "config": conn_config,
+                    "error": str(e),
+                    "traceback": traceback.format_exc()
+                }
+                self.logger.error(f"[Request ID: {request_id}] Failed to initialize connection '{name}': {str(e)}", extra=error_details)
+                
+                # Save error log
+                self.log_manager.save_error_log("initialize_connection_error", {
+                    "connection_name": name,
+                    "error_message": str(e),
+                    "error_details": error_details
+                })
+                
                 results[name] = False
         return results
 
@@ -190,10 +279,27 @@ class ConnectionManager:
         Dispose all database connections.
         This should be called during server shutdown for graceful cleanup.
         """
+        request_id = self.request_id
+        self.logger.info(f"[Request ID: {request_id}] Disposing all database connections")
         for name, engine in self.connections.items():
             try:
                 engine.dispose()
+                self.logger.info(f"[Request ID: {request_id}] Disposed connection '{name}'")
             except Exception as e:
-                self.logger.error(f"Error disposing connection '{name}': {str(e)}")
+                error_details = {
+                    "connection_name": name,
+                    "error": str(e),
+                    "traceback": traceback.format_exc()
+                }
+                self.logger.error(f"[Request ID: {request_id}] Error disposing connection '{name}': {str(e)}", extra=error_details)
+                
+                # Save error log
+                self.log_manager.save_error_log("dispose_connection_error", {
+                    "connection_name": name,
+                    "error_message": str(e),
+                    "error_details": error_details
+                })
+                
         self.connections.clear()
         self.adapters.clear()
+        self.logger.info(f"[Request ID: {request_id}] All database connections disposed")

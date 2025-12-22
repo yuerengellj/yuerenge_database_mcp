@@ -4,11 +4,17 @@ Data Manager for handling data operations.
 
 import logging
 import re
+import traceback
+import uuid
 from datetime import datetime, date
 from typing import Dict, Any, Optional, List
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
+
+from .exceptions import DataOperationError
+from .log_manager import get_log_manager
+
 
 # Import the functions we need for Oracle datetime handling
 def is_datetime_string(value: str) -> bool:
@@ -79,6 +85,8 @@ class DataManager:
     def __init__(self, connection_manager):
         self.connection_manager = connection_manager
         self.logger = logging.getLogger(__name__)
+        self.request_id = str(uuid.uuid4())
+        self.log_manager = get_log_manager()
 
     def execute_query(self, connection_name: str, query: str, params: Optional[Dict[str, Any]] = None, commit: bool = False) -> Optional[list]:
         """
@@ -93,9 +101,21 @@ class DataManager:
         Returns:
             list: Query results or None if connection not found/error occurred
         """
+        request_id = self.request_id
+        self.logger.info(f"[Request ID: {request_id}] Executing query on connection '{connection_name}'")
+        
         engine = self.connection_manager.get_connection(connection_name)
         if not engine:
-            self.logger.error(f"Connection '{connection_name}' not found")
+            error_msg = f"Connection '{connection_name}' not found"
+            self.logger.error(f"[Request ID: {request_id}] {error_msg}")
+            
+            # Save error log
+            self.log_manager.save_error_log("execute_query_missing_connection", {
+                "connection_name": connection_name,
+                "query": query,
+                "error_message": error_msg
+            })
+            
             return None
 
         try:
@@ -110,13 +130,52 @@ class DataManager:
                         trans.commit()
                     # Convert to list of dictionaries
                     columns = result.keys()
-                    return [dict(zip(columns, row)) for row in result.fetchall()]
+                    rows = result.fetchall()
+                    self.logger.info(f"[Request ID: {request_id}] Query executed successfully, fetched {len(rows)} rows")
+                    return [dict(zip(columns, row)) for row in rows]
                 except Exception as e:
                     if commit and trans:
                         trans.rollback()
                     raise e
         except SQLAlchemyError as e:
-            self.logger.error(f"Query execution failed on '{connection_name}': {str(e)}")
+            error_details = {
+                "connection_name": connection_name,
+                "query": query,
+                "params": params,
+                "error": str(e),
+                "traceback": traceback.format_exc()
+            }
+            self.logger.error(f"[Request ID: {request_id}] SQLAlchemy error executing query on '{connection_name}': {str(e)}", extra=error_details)
+            
+            # Save error log
+            self.log_manager.save_error_log("execute_query_sqlalchemy_error", {
+                "connection_name": connection_name,
+                "query": query,
+                "params": params,
+                "error_message": str(e),
+                "error_details": error_details
+            })
+            
+            return None
+        except Exception as e:
+            error_details = {
+                "connection_name": connection_name,
+                "query": query,
+                "params": params,
+                "error": str(e),
+                "traceback": traceback.format_exc()
+            }
+            self.logger.error(f"[Request ID: {request_id}] Unexpected error executing query on '{connection_name}': {str(e)}", extra=error_details)
+            
+            # Save error log
+            self.log_manager.save_error_log("execute_query_unexpected_error", {
+                "connection_name": connection_name,
+                "query": query,
+                "params": params,
+                "error_message": str(e),
+                "error_details": error_details
+            })
+            
             return None
 
     def select_data(self, connection_name: str, table_name: str, conditions: Optional[Dict[str, Any]] = None,
@@ -133,25 +192,49 @@ class DataManager:
         Returns:
             List of dictionaries containing row data or None if error occurred
         """
+        request_id = self.request_id
+        self.logger.info(f"[Request ID: {request_id}] Selecting data from '{connection_name}.{table_name}'")
+        
         engine = self.connection_manager.get_connection(connection_name)
         if not engine:
-            self.logger.error(f"Connection '{connection_name}' not found")
+            error_msg = f"Connection '{connection_name}' not found"
+            self.logger.error(f"[Request ID: {request_id}] {error_msg}")
+            
+            # Save error log
+            self.log_manager.save_error_log("select_data_missing_connection", {
+                "connection_name": connection_name,
+                "table_name": table_name,
+                "error_message": error_msg
+            })
+            
             return None
 
         # Get the appropriate adapter
         adapter = self.connection_manager.get_adapter(connection_name)
         if not adapter:
-            self.logger.error(f"Adapter for connection '{connection_name}' not found")
+            error_msg = f"Adapter for connection '{connection_name}' not found"
+            self.logger.error(f"[Request ID: {request_id}] {error_msg}")
+            
+            # Save error log
+            self.log_manager.save_error_log("select_data_missing_adapter", {
+                "connection_name": connection_name,
+                "table_name": table_name,
+                "error_message": error_msg
+            })
+            
             return None
 
         try:
             # Use adapter to generate SELECT query and parameters
             query, params = adapter.get_select_query(table_name, conditions, limit)
+            self.logger.debug(f"[Request ID: {request_id}] Generated query: {query}")
 
             with engine.connect() as conn:
                 result = conn.execute(text(query), params)
                 columns = result.keys()
                 rows = result.fetchall()
+                
+                self.logger.info(f"[Request ID: {request_id}] Selected {len(rows)} rows from '{connection_name}.{table_name}'")
 
                 # Process rows to handle datetime objects
                 processed_rows = []
@@ -169,7 +252,48 @@ class DataManager:
                 return processed_rows
 
         except SQLAlchemyError as e:
-            self.logger.error(f"Select data failed on '{connection_name}.{table_name}': {str(e)}")
+            error_details = {
+                "connection_name": connection_name,
+                "table_name": table_name,
+                "conditions": conditions,
+                "limit": limit,
+                "error": str(e),
+                "traceback": traceback.format_exc()
+            }
+            self.logger.error(f"[Request ID: {request_id}] SQLAlchemy error selecting data from '{connection_name}.{table_name}': {str(e)}", extra=error_details)
+            
+            # Save error log
+            self.log_manager.save_error_log("select_data_sqlalchemy_error", {
+                "connection_name": connection_name,
+                "table_name": table_name,
+                "conditions": conditions,
+                "limit": limit,
+                "error_message": str(e),
+                "error_details": error_details
+            })
+            
+            return None
+        except Exception as e:
+            error_details = {
+                "connection_name": connection_name,
+                "table_name": table_name,
+                "conditions": conditions,
+                "limit": limit,
+                "error": str(e),
+                "traceback": traceback.format_exc()
+            }
+            self.logger.error(f"[Request ID: {request_id}] Unexpected error selecting data from '{connection_name}.{table_name}': {str(e)}", extra=error_details)
+            
+            # Save error log
+            self.log_manager.save_error_log("select_data_unexpected_error", {
+                "connection_name": connection_name,
+                "table_name": table_name,
+                "conditions": conditions,
+                "limit": limit,
+                "error_message": str(e),
+                "error_details": error_details
+            })
+            
             return None
 
     def select_data_with_pagination(self, connection_name: str, table_name: str, 
@@ -188,20 +312,46 @@ class DataManager:
         Returns:
             Dictionary containing 'data', 'page', 'page_size', 'total_pages', 'total_records' or None if error occurred
         """
+        request_id = self.request_id
+        self.logger.info(f"[Request ID: {request_id}] Selecting data with pagination from '{connection_name}.{table_name}', page {page}, size {page_size}")
+        
         engine = self.connection_manager.get_connection(connection_name)
         if not engine:
-            self.logger.error(f"Connection '{connection_name}' not found")
+            error_msg = f"Connection '{connection_name}' not found"
+            self.logger.error(f"[Request ID: {request_id}] {error_msg}")
+            
+            # Save error log
+            self.log_manager.save_error_log("select_data_pagination_missing_connection", {
+                "connection_name": connection_name,
+                "table_name": table_name,
+                "page": page,
+                "page_size": page_size,
+                "error_message": error_msg
+            })
+            
             return None
 
         # Get the appropriate adapter
         adapter = self.connection_manager.get_adapter(connection_name)
         if not adapter:
-            self.logger.error(f"Adapter for connection '{connection_name}' not found")
+            error_msg = f"Adapter for connection '{connection_name}' not found"
+            self.logger.error(f"[Request ID: {request_id}] {error_msg}")
+            
+            # Save error log
+            self.log_manager.save_error_log("select_data_pagination_missing_adapter", {
+                "connection_name": connection_name,
+                "table_name": table_name,
+                "page": page,
+                "page_size": page_size,
+                "error_message": error_msg
+            })
+            
             return None
 
         try:
             # First get total count
             count_query, count_params = adapter.get_count_query(table_name, conditions)
+            self.logger.debug(f"[Request ID: {request_id}] Count query: {count_query}")
             
             with engine.connect() as conn:
                 count_result = conn.execute(text(count_query), count_params)
@@ -221,10 +371,13 @@ class DataManager:
                 
                 # Use adapter to generate paginated SELECT query and parameters
                 query, params = adapter.get_paginated_select_query(table_name, paginated_conditions)
+                self.logger.debug(f"[Request ID: {request_id}] Paginated query: {query}")
 
                 result = conn.execute(text(query), params)
                 columns = result.keys()
                 rows = result.fetchall()
+                
+                self.logger.info(f"[Request ID: {request_id}] Selected {len(rows)} rows (page {page}/{total_pages}) from '{connection_name}.{table_name}'")
 
                 # Process rows to handle datetime objects
                 processed_rows = []
@@ -248,158 +401,50 @@ class DataManager:
                 }
 
         except SQLAlchemyError as e:
-            self.logger.error(f"Select data with pagination failed on '{connection_name}.{table_name}': {str(e)}")
+            error_details = {
+                "connection_name": connection_name,
+                "table_name": table_name,
+                "page": page,
+                "page_size": page_size,
+                "conditions": conditions,
+                "error": str(e),
+                "traceback": traceback.format_exc()
+            }
+            self.logger.error(f"[Request ID: {request_id}] SQLAlchemy error selecting data with pagination from '{connection_name}.{table_name}': {str(e)}", extra=error_details)
+            
+            # Save error log
+            self.log_manager.save_error_log("select_data_pagination_sqlalchemy_error", {
+                "connection_name": connection_name,
+                "table_name": table_name,
+                "page": page,
+                "page_size": page_size,
+                "conditions": conditions,
+                "error_message": str(e),
+                "error_details": error_details
+            })
+            
             return None
-
-    def insert_data(self, connection_name: str, table_name: str, data: Dict[str, Any]) -> bool:
-        """
-        Insert data into a specific table.
-
-        Args:
-            connection_name: Name of the database connection
-            table_name: Name of the table
-            data: Dictionary of column-value pairs to insert
-
-        Returns:
-            bool: True if successful, False otherwise
-        """
-        engine = self.connection_manager.get_connection(connection_name)
-        if not engine:
-            self.logger.error(f"Connection '{connection_name}' not found")
-            return False
-
-        # Get the appropriate adapter
-        adapter = self.connection_manager.get_adapter(connection_name)
-        if not adapter:
-            self.logger.error(f"Adapter for connection '{connection_name}' not found")
-            return False
-
-        try:
-            # Process data for datetime objects
-            processed_data = {}
-            for key, value in data.items():
-                # Handle datetime objects and datetime strings
-                if isinstance(value, datetime):
-                    processed_data[key] = value
-                elif isinstance(value, str):
-                    # For Oracle, check if string looks like a datetime
-                    if "oracle" in engine.url.drivername and is_datetime_string(value):
-                        # Treat as datetime string for Oracle
-                        processed_data[key] = value
-                    else:
-                        processed_data[key] = value
-                else:
-                    processed_data[key] = value
-
-            # Use adapter to generate INSERT query and parameters
-            query, params = adapter.get_insert_query(table_name, processed_data)
-
-            with engine.connect() as conn:
-                trans = conn.begin()
-                try:
-                    # For Oracle, we may need special handling
-                    if "oracle" in engine.url.drivername:
-                        # Handle Oracle datetime values
-                        oracle_params = {}
-                        for key, value in params.items():
-                            if isinstance(value, datetime) or (isinstance(value, str) and is_datetime_string(value)):
-                                oracle_params[key] = format_datetime_for_oracle(value)
-                            else:
-                                oracle_params[key] = value
-                        conn.execute(text(query), oracle_params)
-                    else:
-                        conn.execute(text(query), params)
-                    trans.commit()
-                    return True
-                except Exception as e:
-                    trans.rollback()
-                    raise e
-
-        except SQLAlchemyError as e:
-            self.logger.error(f"Insert data failed on '{connection_name}.{table_name}': {str(e)}")
-            return False
-
-    def update_data(self, connection_name: str, table_name: str, data: Dict[str, Any],
-                    conditions: Optional[Dict[str, Any]] = None) -> int:
-        """
-        Update data in a specific table.
-
-        Args:
-            connection_name: Name of the database connection
-            table_name: Name of the table
-            data: Dictionary of column-value pairs to update
-            conditions: Optional dictionary of column-value pairs for WHERE clause
-
-        Returns:
-            int: Number of rows affected, -1 if error occurred
-        """
-        engine = self.connection_manager.get_connection(connection_name)
-        if not engine:
-            self.logger.error(f"Connection '{connection_name}' not found")
-            return -1
-
-        # Get the appropriate adapter
-        adapter = self.connection_manager.get_adapter(connection_name)
-        if not adapter:
-            self.logger.error(f"Adapter for connection '{connection_name}' not found")
-            return -1
-
-        try:
-            # Use adapter to generate UPDATE query and parameters
-            query, params = adapter.get_update_query(table_name, data, conditions)
-
-            with engine.connect() as conn:
-                trans = conn.begin()
-                try:
-                    result = conn.execute(text(query), params)
-                    trans.commit()
-                    return result.rowcount
-                except Exception as e:
-                    trans.rollback()
-                    raise e
-
-        except SQLAlchemyError as e:
-            self.logger.error(f"Update data failed on '{connection_name}.{table_name}': {str(e)}")
-            return -1
-
-    def delete_data(self, connection_name: str, table_name: str,
-                    conditions: Optional[Dict[str, Any]] = None) -> int:
-        """
-        Delete data from a specific table.
-
-        Args:
-            connection_name: Name of the database connection
-            table_name: Name of the table
-            conditions: Optional dictionary of column-value pairs for WHERE clause
-
-        Returns:
-            int: Number of rows affected, -1 if error occurred
-        """
-        engine = self.connection_manager.get_connection(connection_name)
-        if not engine:
-            self.logger.error(f"Connection '{connection_name}' not found")
-            return -1
-
-        # Get the appropriate adapter
-        adapter = self.connection_manager.get_adapter(connection_name)
-        if not adapter:
-            self.logger.error(f"Adapter for connection '{connection_name}' not found")
-            return -1
-
-        try:
-            # Use adapter to generate DELETE query and parameters
-            query, params = adapter.get_delete_query(table_name, conditions)
-
-            with engine.connect() as conn:
-                trans = conn.begin()
-                try:
-                    result = conn.execute(text(query), params)
-                    trans.commit()
-                    return result.rowcount
-                except Exception as e:
-                    trans.rollback()
-                    raise e
-
-        except SQLAlchemyError as e:
-            self.logger.error(f"Delete data failed on '{connection_name}.{table_name}': {str(e)}")
-            return -1
+        except Exception as e:
+            error_details = {
+                "connection_name": connection_name,
+                "table_name": table_name,
+                "page": page,
+                "page_size": page_size,
+                "conditions": conditions,
+                "error": str(e),
+                "traceback": traceback.format_exc()
+            }
+            self.logger.error(f"[Request ID: {request_id}] Unexpected error selecting data with pagination from '{connection_name}.{table_name}': {str(e)}", extra=error_details)
+            
+            # Save error log
+            self.log_manager.save_error_log("select_data_pagination_unexpected_error", {
+                "connection_name": connection_name,
+                "table_name": table_name,
+                "page": page,
+                "page_size": page_size,
+                "conditions": conditions,
+                "error_message": str(e),
+                "error_details": error_details
+            })
+            
+            return None
