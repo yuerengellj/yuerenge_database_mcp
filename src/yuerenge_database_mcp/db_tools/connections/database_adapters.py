@@ -95,11 +95,12 @@ class MySQLAdapter(DatabaseAdapter):
         return "SELECT 1"
 
     def get_list_tables_query(self, pattern: Optional[str] = None) -> str:
+        # Use the current database as determined by the connection
         if pattern:
             # Convert LIKE pattern to MySQL pattern
             pattern = pattern.replace('*', '%').replace('?', '_')
-            return f"SHOW TABLES LIKE '{pattern}'"
-        return "SHOW TABLES"
+            return f"SELECT TABLE_NAME, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE' AND TABLE_NAME LIKE '{pattern}' ORDER BY TABLE_NAME"
+        return "SELECT TABLE_NAME, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_NAME"
 
     def get_table_structure_query(self, table_name: str) -> str:
         return f"DESCRIBE `{table_name}`"
@@ -302,12 +303,12 @@ class OracleAdapter(DatabaseAdapter):
         return "SELECT 1 FROM dual"
 
     def get_list_tables_query(self, pattern: Optional[str] = None) -> str:
-        query = "SELECT TABLE_NAME FROM USER_TABLES"
+        query = "SELECT t.TABLE_NAME, tc.COMMENTS FROM USER_TABLES t LEFT JOIN USER_TAB_COMMENTS tc ON t.TABLE_NAME = tc.TABLE_NAME"
         if pattern:
             # Convert LIKE pattern to Oracle pattern
             pattern = pattern.replace('*', '%').replace('?', '_')
-            query += f" WHERE TABLE_NAME LIKE '{pattern}'"
-        query += " ORDER BY TABLE_NAME"
+            query += f" WHERE t.TABLE_NAME LIKE '{pattern}'"
+        query += " ORDER BY t.TABLE_NAME"
         return query
 
     def get_table_structure_query(self, table_name: str) -> str:
@@ -554,12 +555,12 @@ class PostgreSQLAdapter(DatabaseAdapter):
         return "SELECT 1"
 
     def get_list_tables_query(self, pattern: Optional[str] = None) -> str:
-        query = "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
+        query = "SELECT t.tablename, d.description as table_comment FROM pg_tables t JOIN pg_class c ON t.tablename = c.relname JOIN pg_namespace n ON c.relnamespace = n.oid LEFT JOIN pg_description d ON c.oid = d.objoid WHERE n.nspname = 'public'"
         if pattern:
             # Convert LIKE pattern to PostgreSQL pattern
             pattern = pattern.replace('*', '%').replace('?', '_')
-            query += f" AND tablename LIKE '{pattern}'"
-        query += " ORDER BY tablename"
+            query += f" AND t.tablename LIKE '{pattern}'"
+        query += " ORDER BY t.tablename"
         return query
 
     def get_table_structure_query(self, table_name: str) -> str:
@@ -771,6 +772,7 @@ class SQLiteAdapter(DatabaseAdapter):
         return "SELECT 1"
 
     def get_list_tables_query(self, pattern: Optional[str] = None) -> str:
+        # SQLite doesn't support table comments, so we only return table names
         query = "SELECT name FROM sqlite_master WHERE type='table'"
         if pattern:
             # Convert LIKE pattern to SQLite pattern
@@ -955,12 +957,12 @@ class SQLServerAdapter(DatabaseAdapter):
         return "SELECT 1"
 
     def get_list_tables_query(self, pattern: Optional[str] = None) -> str:
-        query = "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'"
+        query = "SELECT t.TABLE_NAME, ex.value as table_comment FROM INFORMATION_SCHEMA.TABLES t LEFT JOIN sys.extended_properties ex ON t.TABLE_NAME = OBJECT_NAME(ex.major_id) AND ex.minor_id = 0 AND ex.name = 'MS_Description' WHERE t.TABLE_TYPE = 'BASE TABLE'"
         if pattern:
             # Convert LIKE pattern to SQL Server pattern
             pattern = pattern.replace('*', '%').replace('?', '_')
-            query += f" AND TABLE_NAME LIKE '{pattern}'"
-        query += " ORDER BY TABLE_NAME"
+            query += f" AND t.TABLE_NAME LIKE '{pattern}'"
+        query += " ORDER BY t.TABLE_NAME"
         return query
 
     def get_table_structure_query(self, table_name: str) -> str:

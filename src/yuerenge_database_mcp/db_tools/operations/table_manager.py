@@ -81,27 +81,17 @@ class TableManager:
                 else:
                     result = conn.execute(text(query))
                     
-                if "mysql" in engine.url.drivername:
+                if "mysql" in engine.url.drivername or "oracle" in engine.url.drivername or "postgresql" in engine.url.drivername or "mssql" in engine.url.drivername:
+                    # For MySQL, Oracle, PostgreSQL, and SQL Server, we have table comments in the result
                     tables = []
                     for row in result.fetchall():
                         table_name = row[0]
                         table_comment = row[1] if len(row) > 1 else None
-                        if table_comment:
+                        if table_comment and table_comment.strip():
                             tables.append(f"{table_name}({table_comment})")
                         else:
                             tables.append(table_name)
-                    self.logger.info(f"[Request ID: {request_id}] Found {len(tables)} tables in MySQL database")
-                    return tables
-                elif "oracle" in engine.url.drivername:
-                    tables = []
-                    for row in result.fetchall():
-                        table_name = row[0]
-                        table_comment = row[1] if len(row) > 1 else None
-                        if table_comment:
-                            tables.append(f"{table_name}({table_comment})")
-                        else:
-                            tables.append(table_name)
-                    self.logger.info(f"[Request ID: {request_id}] Found {len(tables)} tables in Oracle database")
+                    self.logger.info(f"[Request ID: {request_id}] Found {len(tables)} tables in {engine.url.drivername} database")
                     return tables
                 else:
                     # For other databases, just return table names
