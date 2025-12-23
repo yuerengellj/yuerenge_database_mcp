@@ -1,12 +1,12 @@
 [project]
 name = "yuerenge-database-mcp"
-version = "0.1.4"
+version = "0.1.6"
 description = "A database management tool based on the MCP protocol"
 readme = "README.md"
 authors = [
     { name = "yuerenge", email = "2309814831@qq.com" }
 ]
-requires-python = ">=3.14"
+requires-python = ">=3.8"
 dependencies = [
     "mcp[cli]>=1.24.0",
     "sqlalchemy>=2.0.0",
