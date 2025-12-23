@@ -1,5 +1,16 @@
 """
 Database tools for MCP server.
+
+This module defines the MCP tools that provide database management functionality.
+The tools are organized into several categories:
+1. Connection Management Tools - for adding, removing, and listing database connections
+2. Configuration Management Tools - for managing connection configurations
+3. Table Structure Tools - for table operations like listing, creating, and dropping
+4. Data Query Tools - for executing queries and selecting data
+5. Data Manipulation Tools - for inserting, updating, and deleting data
+6. Advanced Query Tools - for smart formatting and specialized queries
+
+Each tool is decorated with @mcp.tool() to make it available through the MCP protocol.
 """
 
 import os
@@ -18,7 +29,15 @@ db_manager = None
 config_manager = None
 
 def set_managers(database_manager, configuration_manager):
-    """Set the database and configuration managers for the tools."""
+    """Set the database and configuration managers for the tools.
+    
+    This function is called during server initialization to provide
+    the tools with access to the database and configuration managers.
+    
+    Args:
+        database_manager: Instance of DatabaseManager
+        configuration_manager: Instance of DatabaseConfigManager
+    """
     global db_manager, config_manager
     db_manager = database_manager
     config_manager = configuration_manager
@@ -40,7 +59,10 @@ def add_database_connection(
     save_to_config: bool = False
 ) -> bool:
     """
-    Add a new database connection.
+    Add a new database connection and optionally save to configuration.
+    
+    This tool creates a new database connection and adds it to the connection pool.
+    If save_to_config is True, the connection details are also saved to the configuration file.
     
     Args:
         name: Connection identifier (must be unique)
@@ -85,7 +107,10 @@ def add_database_connection(
 @mcp.tool()
 def remove_database_connection(name: str, remove_from_config: bool = False) -> bool:
     """
-    Remove a database connection.
+    Remove a database connection and optionally from configuration.
+    
+    This tool removes a database connection from the connection pool.
+    If remove_from_config is True, the connection is also removed from the configuration file.
     
     Args:
         name: Connection identifier
@@ -107,7 +132,10 @@ def remove_database_connection(name: str, remove_from_config: bool = False) -> b
 @mcp.tool()
 def list_database_connections() -> Dict[str, str]:
     """
-    List all database connections.
+    List all active database connections.
+    
+    Returns a mapping of connection names to their database types.
+    Only connections that are currently active in the connection pool are listed.
     
     Returns:
         Dict[str, str]: Mapping of connection names to database types
@@ -124,6 +152,9 @@ def list_configured_connections() -> List[Dict[str, Any]]:
     """
     List all configured database connections from the configuration file.
     
+    Returns detailed information about each connection defined in the configuration file,
+    including connection parameters, enabled status, and pool settings.
+    
     Returns:
         List of configured connections with their details
     """
@@ -134,6 +165,9 @@ def list_configured_connections() -> List[Dict[str, Any]]:
 def enable_configured_connection(name: str) -> bool:
     """
     Enable a configured connection so it will be automatically connected on startup.
+    
+    This tool updates the configuration to enable a connection, meaning it will
+    be automatically connected when the server starts up or when reload_configurations is called.
     
     Args:
         name: Name of the connection to enable
@@ -149,6 +183,9 @@ def disable_configured_connection(name: str) -> bool:
     """
     Disable a configured connection so it won't be automatically connected on startup.
     
+    This tool updates the configuration to disable a connection, meaning it will
+    not be automatically connected when the server starts up or when reload_configurations is called.
+    
     Args:
         name: Name of the connection to disable
         
@@ -161,7 +198,11 @@ def disable_configured_connection(name: str) -> bool:
 @mcp.tool()
 def reload_configurations() -> Dict[str, bool]:
     """
-    Reload database connections from configuration file.
+    Reload database connections from configuration file and initialize them.
+    
+    This tool reloads the configuration file and initializes all enabled connections.
+    It attempts to connect to each enabled database and returns the status of each connection attempt.
+    This is useful for applying configuration changes without restarting the server.
     
     Returns:
         Dict mapping connection names to connection success status
@@ -179,6 +220,9 @@ def list_tables(connection_name: str, pattern: Optional[str] = None) -> Optional
     """
     List all table names for the user in the specified database connection.
     
+    Optionally filter table names using a pattern where % acts as a wildcard.
+    This allows for searching tables that match a specific naming convention.
+    
     Args:
         connection_name: Name of the database connection
         pattern: Optional pattern to filter table names (supports % as wildcard)
@@ -192,7 +236,10 @@ def list_tables(connection_name: str, pattern: Optional[str] = None) -> Optional
 @mcp.tool()
 def get_table_structure(connection_name: str, table_name: str, pattern: Optional[str] = None) -> Optional[List[Dict[str, Any]]]:
     """
-    Get structure information for a specific table.
+    Get structure information for a specific table including column details.
+    
+    Returns detailed information about each column in the table such as name, type,
+    nullability, default value, and any comments. Optionally filter columns using a pattern.
     
     Args:
         connection_name: Name of the database connection
@@ -209,7 +256,10 @@ def get_table_structure(connection_name: str, table_name: str, pattern: Optional
 def create_table(connection_name: str, table_name: str, 
                 columns: List[Dict[str, Any]], table_comment: Optional[str] = None) -> bool:
     """
-    Create a new table.
+    Create a new table with specified columns and optional table comment.
+    
+    Each column is defined as a dictionary with properties like name, type, nullability, etc.
+    The tool handles database-specific syntax differences automatically through adapters.
     
     Args:
         connection_name: Name of the database connection
@@ -233,7 +283,10 @@ def create_table(connection_name: str, table_name: str,
 def drop_table(connection_name: str, table_name: str, 
               cascade: bool = False) -> bool:
     """
-    Drop a table.
+    Drop a table and optionally its dependent objects.
+    
+    Use the cascade parameter to drop dependent objects like foreign keys and views
+    that reference the table. Behavior may vary depending on the database type.
     
     Args:
         connection_name: Name of the database connection
@@ -250,7 +303,10 @@ def drop_table(connection_name: str, table_name: str,
 def alter_table(connection_name: str, table_name: str,
                 operations: List[Dict[str, Any]]) -> bool:
     """
-    Alter table structure with various operations.
+    Alter table structure with various operations like adding, dropping, or modifying columns.
+    
+    Supports multiple types of operations in a single call. Each operation is defined as a
+    dictionary specifying the operation type and required parameters.
     
     Args:
         connection_name: Name of the database connection
@@ -275,7 +331,11 @@ def alter_table(connection_name: str, table_name: str,
 @mcp.tool()
 def execute_query(connection_name: str, query: str, commit: bool = False) -> Optional[List[Dict[str, Any]]]:
     """
-    Execute a query on a specific database.
+    Execute a raw SQL query on a specific database connection.
+    
+    Use this tool for complex queries that are not covered by the specialized tools.
+    Set commit=True for INSERT, UPDATE, or DELETE operations that need to be committed.
+    The query is executed with proper parameterization to prevent SQL injection.
     
     Args:
         connection_name: Name of the database connection
@@ -293,7 +353,9 @@ def select_data(connection_name: str, table_name: str, conditions: Optional[Dict
                limit: Optional[int] = None) -> Optional[str]:
     """
     Select data from a specific table and format using smart table formatting.
+    
     Automatically chooses the best format based on column count for optimal viewing experience.
+    Supports conditional selection and row limiting. The data is formatted for readability.
     
     Args:
         connection_name: Name of the database connection
@@ -319,7 +381,10 @@ def select_data(connection_name: str, table_name: str, conditions: Optional[Dict
 @mcp.tool()
 def insert_data(connection_name: str, table_name: str, data: Dict[str, Any]) -> bool:
     """
-    Insert data into a specific table.
+    Insert a single record into a specific table with proper parameterization.
+    
+    Handles database-specific data type conversions and date formatting automatically.
+    The tool uses parameterized queries to prevent SQL injection attacks.
     
     Args:
         connection_name: Name of the database connection
@@ -335,7 +400,10 @@ def insert_data(connection_name: str, table_name: str, data: Dict[str, Any]) -> 
 @mcp.tool()
 def batch_insert_data(connection_name: str, table_name: str, data_list: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    Insert multiple records into a specific table.
+    Insert multiple records into a specific table efficiently in a batch operation.
+    
+    Processes multiple records in a single operation for better performance than
+    individual inserts. Returns detailed results about successful and failed inserts.
     
     Args:
         connection_name: Name of the database connection
@@ -352,7 +420,11 @@ def batch_insert_data(connection_name: str, table_name: str, data_list: List[Dic
 def update_data(connection_name: str, table_name: str, data: Dict[str, Any], 
                conditions: Optional[Dict[str, Any]] = None) -> int:
     """
-    Update data in a specific table.
+    Update records in a specific table based on specified conditions.
+    
+    Updates matching records with the provided data. If no conditions are provided,
+    all records in the table will be updated (use with caution).
+    Returns the number of affected rows.
     
     Args:
         connection_name: Name of the database connection
@@ -370,7 +442,10 @@ def update_data(connection_name: str, table_name: str, data: Dict[str, Any],
 def batch_update_data(connection_name: str, table_name: str, data_list: List[Dict[str, Any]], 
                      conditions_list: List[Optional[Dict[str, Any]]]) -> Dict[str, Any]:
     """
-    Update multiple records in a specific table.
+    Update multiple records in a specific table with different data and conditions for each update.
+    
+    Processes multiple update operations in a batch. Each update operation has its own
+    data to update and conditions to match. The lists must have the same length.
     
     Args:
         connection_name: Name of the database connection
@@ -388,7 +463,11 @@ def batch_update_data(connection_name: str, table_name: str, data_list: List[Dic
 def delete_data(connection_name: str, table_name: str, 
                conditions: Optional[Dict[str, Any]] = None) -> int:
     """
-    Delete data from a specific table.
+    Delete records from a specific table based on specified conditions.
+    
+    Deletes matching records from the table. If no conditions are provided,
+    all records in the table will be deleted (use with extreme caution).
+    Returns the number of affected rows.
     
     Args:
         connection_name: Name of the database connection
@@ -405,7 +484,10 @@ def delete_data(connection_name: str, table_name: str,
 def batch_delete_data(connection_name: str, table_name: str, 
                      conditions_list: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    Delete multiple records from a specific table.
+    Delete multiple sets of records from a specific table based on different conditions for each deletion.
+    
+    Processes multiple delete operations in a batch. Each operation has its own conditions
+    to determine which records to delete. This is more efficient than individual deletions.
     
     Args:
         connection_name: Name of the database connection
@@ -425,9 +507,11 @@ def batch_delete_data(connection_name: str, table_name: str,
 def select_data_smart(connection_name: str, table_name: str, conditions: Optional[Dict[str, Any]] = None,
                       limit: Optional[int] = None, max_columns: int = 10) -> Optional[str]:
     """
-    Select data from a specific table and format using smart table formatting.
-    Automatically chooses the best format based on column count.
-
+    Select data from a specific table and format using smart table formatting based on column count.
+    
+    Automatically chooses the best format (horizontal, vertical, or paged) based on the number of columns
+    to ensure optimal readability. Particularly useful for tables with many columns.
+    
     Args:
         connection_name: Name of the database connection
         table_name: Name of the table
@@ -448,9 +532,11 @@ def select_data_smart(connection_name: str, table_name: str, conditions: Optiona
 def select_data_paged(connection_name: str, table_name: str, conditions: Optional[Dict[str, Any]] = None,
                       limit: Optional[int] = None, columns_per_page: int = 8, rows_per_page: int = 20) -> Optional[str]:
     """
-    Select data from a specific table and format as paged table.
-    Shows only a subset of columns at a time, useful for tables with many columns.
-
+    Select data from a specific table and format as paged table for tables with many columns or rows.
+    
+    Particularly useful for tables with many columns, showing only a subset at a time to improve readability.
+    Also useful for large result sets that would be difficult to view in a single display.
+    
     Args:
         connection_name: Name of the database connection
         table_name: Name of the table
@@ -473,9 +559,11 @@ def select_data_paged(connection_name: str, table_name: str, conditions: Optiona
 def select_data_summary(connection_name: str, table_name: str, conditions: Optional[Dict[str, Any]] = None,
                         limit: Optional[int] = None, max_columns: int = 6, sample_rows: int = 5) -> Optional[str]:
     """
-    Select data from a specific table and format as summary table.
-    Shows only the most important columns and a sample of rows.
-
+    Select data from a specific table and format as summary table showing key information only.
+    
+    Displays only the most important columns and a sample of rows, useful for getting
+    a quick overview of large tables without overwhelming the display with too much data.
+    
     Args:
         connection_name: Name of the database connection
         table_name: Name of the table
@@ -498,7 +586,10 @@ def select_data_summary(connection_name: str, table_name: str, conditions: Optio
 def select_data_html(connection_name: str, table_name: str, conditions: Optional[Dict[str, Any]] = None,
                      limit: Optional[int] = None) -> Optional[str]:
     """
-    Select data from a specific table and format as HTML table for browser display.
+    Select data from a specific table and format as HTML table for browser display with interactive features.
+    
+    Creates an HTML file with the table data and automatically opens it in the default browser.
+    Provides better visualization for large datasets and includes search/filter capabilities in some cases.
     
     Args:
         connection_name: Name of the database connection

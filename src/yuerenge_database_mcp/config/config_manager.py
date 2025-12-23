@@ -1,5 +1,19 @@
 """
 Configuration manager for database connections.
+
+This module provides functionality to load, validate, save, and manage database connection configurations.
+It supports multiple database types and validates configuration parameters to ensure proper setup.
+
+Configuration files are stored in JSON format and can be loaded from:
+1. The path specified in the DATABASE_CONFIG_PATH environment variable
+2. A default path provided during initialization
+3. The default location: config/database_config.json
+
+The module includes validation for:
+- Required fields for each database type
+- Valid port numbers (1-65535)
+- Supported database types
+- Boolean values for enabled flag
 """
 
 import json
@@ -13,7 +27,32 @@ class ConfigValidationError(Exception):
 
 
 class DatabaseConfigManager:
-    """Manages database connection configurations."""
+    """Manages database connection configurations.
+
+    This class handles loading, validating, saving, and managing database connection configurations
+    from JSON files. It supports multiple database types and validates configuration parameters
+    to ensure proper setup before attempting connections.
+    
+    Configuration files follow this structure:
+    {
+      "connections": [
+        {
+          "name": "connection_name",
+          "type": "database_type",
+          "host": "hostname",  # Required for non-SQLite databases
+          "port": 3306,        # Required for non-SQLite databases
+          "username": "user",  # Required for non-SQLite databases
+          "password": "pass",  # Required for non-SQLite databases
+          "database": "dbname",# Required for all database types
+          "enabled": true,     # Optional, defaults to False
+          "pool_size": 5,      # Optional connection pool settings
+          "max_overflow": 10,  # Optional connection pool settings
+          "pool_timeout": 30,  # Optional connection pool settings
+          "pool_recycle": 3600 # Optional connection pool settings
+        }
+      ]
+    }
+    """
 
     def __init__(self, config_file: str = None):
         """
@@ -35,7 +74,15 @@ class DatabaseConfigManager:
         self.load_config()
 
     def load_config(self) -> None:
-        """Load configuration from file."""
+        """Load configuration from file.
+        
+        This method loads the configuration from the specified file path.
+        If the file doesn't exist, it creates a default configuration.
+        The loaded configuration is validated before being stored.
+        
+        Raises:
+            ConfigValidationError: If the configuration file contains invalid data
+        """
         if os.path.exists(self.config_file):
             try:
                 with open(self.config_file, 'r', encoding='utf-8') as f:
@@ -55,6 +102,11 @@ class DatabaseConfigManager:
     def validate_config(self, config_data: Dict[str, Any]) -> None:
         """
         Validate configuration data.
+        
+        This method validates the overall configuration structure including:
+        - Ensuring the data is a dictionary
+        - Checking for required 'connections' key
+        - Validating each connection configuration
         
         Args:
             config_data: Configuration data to validate
@@ -77,6 +129,13 @@ class DatabaseConfigManager:
     def _validate_connection_config(self, conn: Dict[str, Any], index: int) -> None:
         """
         Validate a single connection configuration.
+        
+        Validates required fields based on database type:
+        - For non-SQLite databases: name, type, host, port, username, password, database
+        - For SQLite databases: name, type, database
+        - Validates port number range (1-65535)
+        - Validates database type is supported
+        - Validates enabled flag is boolean if present
         
         Args:
             conn: Connection configuration to validate
@@ -116,7 +175,12 @@ class DatabaseConfigManager:
             raise ConfigValidationError(f"Connection '{conn['name']}': 'enabled' must be a boolean")
 
     def save_config(self) -> None:
-        """Save configuration to file."""
+        """Save configuration to file.
+        
+        This method saves the current configuration to the specified file.
+        It ensures the directory exists before writing the file.
+        The configuration is saved in a human-readable JSON format with indentation.
+        """
         # Ensure directory exists
         config_dir = os.path.dirname(self.config_file)
         if config_dir:  # Only create directory if there is a path
@@ -151,6 +215,10 @@ class DatabaseConfigManager:
         """
         Add a new connection configuration.
         
+        Validates the connection configuration before adding it.
+        Checks for duplicate connection names.
+        Saves the updated configuration to file.
+        
         Args:
             connection_config: Connection configuration dictionary
             
@@ -179,6 +247,10 @@ class DatabaseConfigManager:
         """
         Update an existing connection configuration.
         
+        Validates the new connection configuration before updating.
+        Replaces the entire connection configuration with the new one.
+        Saves the updated configuration to file.
+        
         Args:
             name: Name of the connection to update
             connection_config: New connection configuration
@@ -206,6 +278,8 @@ class DatabaseConfigManager:
         """
         Remove a connection configuration.
         
+        Removes the connection from the configuration and saves the file.
+        
         Args:
             name: Name of the connection to remove
             
@@ -225,6 +299,9 @@ class DatabaseConfigManager:
         """
         Enable a connection.
         
+        Sets the 'enabled' flag to True for the specified connection.
+        Saves the updated configuration to file.
+        
         Args:
             name: Name of the connection to enable
             
@@ -242,6 +319,9 @@ class DatabaseConfigManager:
     def disable_connection(self, name: str) -> bool:
         """
         Disable a connection.
+        
+        Sets the 'enabled' flag to False for the specified connection.
+        Saves the updated configuration to file.
         
         Args:
             name: Name of the connection to disable

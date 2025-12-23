@@ -1,5 +1,29 @@
 """
 MCP Database Tools Server
+
+This module implements a Model Context Protocol (MCP) server for database management.
+It provides a comprehensive set of tools for managing database connections, executing
+queries, manipulating data, and handling table structures across multiple database types.
+
+The server supports:
+- Multiple database types (MySQL, Oracle, PostgreSQL, SQLite, SQL Server)
+- Connection pooling and management
+- Configuration via JSON files with environment variable override
+- Graceful shutdown handling
+- Data formatting in multiple formats (table, HTML, paged, etc.)
+- Batch operations for improved performance
+- Smart data display based on content size
+
+Configuration:
+- The server can load configuration from a JSON file specified by the
+  DATABASE_CONFIG_PATH environment variable
+- If not specified, it defaults to config/database_config.json
+- Configuration includes connection details, pooling settings, and enabled status
+
+Usage:
+- Run the server with `python -m yuerenge_database_mcp`
+- Or use the installed CLI command `yuerenge-database-mcp`
+- Connect using an MCP client to access the database tools
 """
 
 import os
@@ -116,7 +140,12 @@ mcp.add_tool(select_data_html)
 
 
 def cleanup_database_connections():
-    """Clean up all database connections."""
+    """Clean up all database connections.
+    
+    This function disposes of all active database connections to ensure
+    proper resource cleanup during server shutdown. It should be called
+    as part of the shutdown process to prevent resource leaks.
+    """
     if db_manager:
         try:
             db_manager.dispose_all_connections()
@@ -125,7 +154,13 @@ def cleanup_database_connections():
 
 
 async def shutdown_handler():
-    """Handle server shutdown gracefully."""
+    """Handle server shutdown gracefully.
+    
+    This async function performs the complete shutdown sequence:
+    1. Executes all registered cleanup callbacks
+    2. Cleans up database connections
+    3. Logs shutdown completion
+    """
     lifecycle_manager = get_lifecycle_manager()
     print("Shutting down database MCP server...", file=sys.stderr)
     await lifecycle_manager.cleanup()
@@ -134,7 +169,18 @@ async def shutdown_handler():
 
 
 def main():
-    """Main entry point for the database MCP server."""
+    """Main entry point for the database MCP server.
+    
+    This function initializes the server, sets up signal handlers for
+    graceful shutdown, starts the MCP server, and manages the server lifecycle.
+    It handles:
+    - Configuration loading and validation
+    - Lifecycle management setup
+    - Signal handling for shutdown
+    - Stdin monitoring for client disconnection
+    - Thread management for server operation
+    - Graceful cleanup on shutdown
+    """
     print("Starting Database MCP Server...", file=sys.stderr)
     if config_file_path:
         print(f"Using config file: {config_file_path}", file=sys.stderr)
