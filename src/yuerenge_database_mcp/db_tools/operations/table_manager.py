@@ -12,90 +12,11 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
-from .exceptions import TableOperationError
-from .log_manager import get_log_manager
+from ..core.exceptions import TableOperationError
+from ..utils.log_manager import get_log_manager
 
 
-def is_datetime_string(value: str) -> bool:
-    """
-    Check if a string represents a datetime in format YYYY-MM-DD or YYYY-MM-DD HH:MM:SS
-
-    Args:
-        value: String to check
-
-    Returns:
-        bool: True if string matches datetime format, False otherwise
-    """
-    if not isinstance(value, str):
-        return False
-
-    # Pattern for date only (YYYY-MM-DD) or date with time (YYYY-MM-DD HH:MM:SS)
-    datetime_pattern = r"^\d{4}-\d{2}-\d{2}( \d{2}:\d{2}:\d{2})?$"
-    return bool(re.match(datetime_pattern, value))
-
-
-def is_date_string(value: str) -> bool:
-    """
-    Check if a string represents a date in format YYYY-MM-DD
-
-    Args:
-        value: String to check
-
-    Returns:
-        bool: True if string matches date format, False otherwise
-    """
-    if not isinstance(value, str):
-        return False
-
-    # Pattern for date only (YYYY-MM-DD)
-    date_pattern = r"^\d{4}-\d{2}-\d{2}$"
-    return bool(re.match(date_pattern, value))
-
-
-def format_datetime_for_oracle(value: Any) -> str:
-    """
-    Format a datetime value for Oracle database insertion.
-
-    Args:
-        value: Datetime value to format (datetime object or string)
-
-    Returns:
-        str: Formatted datetime string for Oracle
-    """
-    if isinstance(value, datetime):
-        return value.strftime('%Y-%m-%d %H:%M:%S')
-    elif isinstance(value, date):
-        return value.strftime('%Y-%m-%d')
-    elif isinstance(value, str):
-        # Check if it's a datetime string
-        if is_datetime_string(value):
-            # Ensure it has time component
-            if ' ' not in value:
-                return f"{value} 00:00:00"
-            return value
-        elif is_date_string(value):
-            return f"{value} 00:00:00"
-    return str(value)
-
-
-def format_date_for_oracle(value: Any) -> str:
-    """
-    Format a date value for Oracle database insertion.
-
-    Args:
-        value: Date value to format (date object or string)
-
-        Returns:
-            str: Formatted date string for Oracle
-    """
-    if isinstance(value, (datetime, date)):
-        return value.strftime('%Y-%m-%d')
-    elif isinstance(value, str) and (is_datetime_string(value) or is_date_string(value)):
-        # Extract date part
-        if ' ' in value:
-            return value.split(' ')[0]
-        return value
-    return str(value)
+from ..utils.oracle_utils import is_datetime_string, is_date_string, format_datetime_for_oracle, format_date_for_oracle
 
 
 class TableManager:

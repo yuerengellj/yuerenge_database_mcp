@@ -13,17 +13,28 @@ yuerenge_database_mcp/
 │   │   │   └── sample_database_config.json # 配置示例
 │   │   ├── db_tools/
 │   │   │   ├── __init__.py
-│   │   │   ├── async_data_manager.py  # 异步数据管理
-│   │   │   ├── connection_manager.py  # 连接管理
-│   │   │   ├── data_manager.py        # 数据操作管理
-│   │   │   ├── database_adapters.py   # 数据库适配器
 │   │   │   ├── database_manager.py    # 数据库管理主类
 │   │   │   ├── db_tools.py            # MCP工具定义
-│   │   │   ├── exceptions.py          # 自定义异常
-│   │   │   ├── format_manager.py      # 数据格式化
-│   │   │   ├── log_manager.py         # 日志管理
-│   │   │   ├── oracle_utils.py        # Oracle特定工具
-│   │   │   └── table_manager.py       # 表结构管理
+│   │   │   ├── connections/
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── connection_manager.py  # 连接管理
+│   │   │   │   └── database_adapters.py   # 数据库适配器
+│   │   │   ├── core/
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── database_manager.py    # 核心数据库管理
+│   │   │   │   └── exceptions.py          # 自定义异常
+│   │   │   ├── formatting/
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── format_manager.py      # 数据格式化
+│   │   │   ├── operations/
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── async_data_manager.py  # 异步数据管理
+│   │   │   │   ├── data_manager.py        # 数据操作管理
+│   │   │   │   └── table_manager.py       # 表结构管理
+│   │   │   └── utils/
+│   │   │       ├── __init__.py
+│   │   │       ├── log_manager.py         # 日志管理
+│   │   │       └── oracle_utils.py        # Oracle特定工具
 │   │   ├── __init__.py
 │   │   └── server_lifecycle.py        # 服务器生命周期管理
 │   ├── README.md
@@ -43,7 +54,7 @@ yuerenge_database_mcp/
 - 提供添加、更新、删除和启用/禁用连接的API
 - 支持环境变量 `DATABASE_CONFIG_PATH` 指定配置文件路径
 
-### 2. 连接管理 (db_tools/connection_manager.py)
+### 2. 连接管理 (db_tools/connections/connection_manager.py)
 
 `ConnectionManager` 类负责数据库连接的创建和管理：
 
@@ -52,38 +63,7 @@ yuerenge_database_mcp/
 - 管理连接池设置
 - 提供连接测试功能
 
-### 3. 数据操作 (db_tools/data_manager.py)
-
-`DataManager` 类提供数据操作功能：
-
-- 查询、插入、更新、删除操作
-- 支持参数化查询防止SQL注入
-- 批量操作支持
-- 分页查询支持
-- 日期时间处理（特别是Oracle数据库）
-
-### 4. 表结构管理 (db_tools/table_manager.py)
-
-提供表结构相关的操作：
-
-- 列出表
-- 获取表结构
-- 创建、修改、删除表
-- 支持不同数据库的语法差异
-
-### 5. 格式化管理 (db_tools/format_manager.py)
-
-提供多种数据格式化选项：
-
-- 普通表格格式
-- IDE风格表格
-- 垂直表格
-- HTML表格
-- 智能表格（根据列数自动选择格式）
-- 分页表格
-- 摘要表格
-
-### 6. 数据库适配器 (db_tools/database_adapters.py)
+### 3. 数据库适配器 (db_tools/connections/database_adapters.py)
 
 为不同数据库类型提供适配器模式：
 
@@ -95,7 +75,54 @@ yuerenge_database_mcp/
 
 每种适配器处理特定数据库的语法差异。
 
-### 7. 日志管理 (db_tools/log_manager.py)
+### 4. 核心数据库管理 (db_tools/core/database_manager.py)
+
+`DatabaseManager` 类提供核心数据库管理功能：
+
+- 管理所有数据库连接
+- 协调不同数据库操作
+- 处理连接的初始化和清理
+
+### 5. 数据操作 (db_tools/operations/data_manager.py)
+
+`DataManager` 类提供数据操作功能：
+
+- 查询、插入、更新、删除操作
+- 支持参数化查询防止SQL注入
+- 批量操作支持
+- 分页查询支持
+- 日期时间处理（特别是Oracle数据库）
+
+### 6. 异步数据管理 (db_tools/operations/async_data_manager.py)
+
+`AsyncDataManager` 类提供异步数据操作功能：
+
+- 异步执行数据库操作
+- 提高并发性能
+- 处理大量数据的异步操作
+
+### 7. 表结构管理 (db_tools/operations/table_manager.py)
+
+提供表结构相关的操作：
+
+- 列出表
+- 获取表结构
+- 创建、修改、删除表
+- 支持不同数据库的语法差异
+
+### 8. 格式化管理 (db_tools/formatting/format_manager.py)
+
+提供多种数据格式化选项：
+
+- 普通表格格式
+- IDE风格表格
+- 垂直表格
+- HTML表格
+- 智能表格（根据列数自动选择格式）
+- 分页表格
+- 摘要表格
+
+### 9. 日志管理 (db_tools/utils/log_manager.py)
 
 `LogManager` 类负责错误日志的记录和管理：
 
@@ -104,13 +131,24 @@ yuerenge_database_mcp/
 - 每条错误日志单独保存为JSON格式文件
 - 文件名格式：操作类型+操作时间（YYYYMMDD_HHMMSS_随机数）
 
+### 10. 自定义异常 (db_tools/core/exceptions.py)
+
+定义了项目中使用的各种自定义异常：
+
+- `DatabaseToolError`: 基础异常类
+- `DatabaseConnectionError`: 连接相关异常
+- `DatabaseOperationError`: 操作相关异常
+- `TableOperationError`: 表操作相关异常
+- `DataOperationError`: 数据操作相关异常
+- `ConfigurationError`: 配置相关异常
+
 ## 扩展开发
 
 ### 添加新的数据库支持
 
 要添加新的数据库支持，需要：
 
-1. 在 [database_adapters.py](file:///D:/File/Workspace/MCP/yuerenge_database_mcp/src/yuerenge_database_mcp/db_tools/database_adapters.py) 中创建新的适配器类
+1. 在 [db_tools/connections/database_adapters.py](file:///D:/File/Workspace/MCP/yuerenge_database_mcp/src/yuerenge_database_mcp/db_tools/connections/database_adapters.py) 中创建新的适配器类
 2. 实现基本的适配器方法（连接字符串、测试查询、查询生成等）
 3. 在 `get_database_adapter` 函数中添加新的数据库类型映射
 4. 在配置验证中添加新的数据库类型
@@ -138,7 +176,7 @@ def new_tool_function(param1: str, param2: int) -> str:
 
 ### 添加新的格式化选项
 
-在 [format_manager.py](file:///D:/File/Workspace/MCP/yuerenge_database_mcp/src/yuerenge_database_mcp/db_tools/format_manager.py) 中添加新的格式化方法：
+在 [db_tools/formatting/format_manager.py](file:///D:/File/Workspace/MCP/yuerenge_database_mcp/src/yuerenge_database_mcp/db_tools/formatting/format_manager.py) 中添加新的格式化方法：
 
 ```python
 def format_as_new_style(self, data, connection_name, table_name):
@@ -224,6 +262,30 @@ def format_as_new_style(self, data, connection_name, table_name):
 - `DATABASE_CONFIG_PATH`: 指定配置文件路径
 - `ERROR_LOG_PATH`: 指定错误日志存储路径（默认：./error_logs）
 - 通过环境变量管理敏感信息
+
+### MCP服务器配置
+
+要将此工具作为MCP服务器运行，需要在MCP客户端配置中添加以下配置：
+
+```json
+{
+  "yuerenge-database-mcp": {
+    "command": "uvx",
+    "args": [
+      "yuerenge-database-mcp"
+    ],
+    "env": {
+      "DATABASE_CONFIG_PATH": "path/to/config.json",
+      "ERROR_LOG_PATH": "path/to/log/directory"
+    }
+  }
+}
+```
+
+配置说明：
+- `command`: 可以是 `uvx`（推荐）或 `python -m yuerenge_database_mcp`
+- `DATABASE_CONFIG_PATH`: 指向包含数据库连接信息的JSON配置文件
+- `ERROR_LOG_PATH`: 指定错误日志存储的目录
 
 ### 日志管理
 

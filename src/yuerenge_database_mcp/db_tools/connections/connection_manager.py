@@ -14,8 +14,8 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
 from .database_adapters import get_database_adapter
-from .exceptions import DatabaseConnectionError, ConfigurationError
-from .log_manager import get_log_manager
+from ..core.exceptions import DatabaseConnectionError, ConfigurationError
+from ..utils.log_manager import get_log_manager
 
 
 class ConnectionManager:

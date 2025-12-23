@@ -6,12 +6,33 @@
 - `connections`: 数据库连接配置数组
 - `default_settings`: 默认连接池设置（可选）
 
+配置管理由 `config` 模块中的 `DatabaseConfigManager` 类处理，该模块专门负责配置的加载、验证和管理。
+
 ## 环境变量
 
 该工具支持以下环境变量：
 
 - `DATABASE_CONFIG_PATH`: 指定配置文件的路径
 - `ERROR_LOG_PATH`: 指定错误日志存储的目录（默认：./error_logs）
+
+## MCP服务器配置
+
+作为MCP服务器运行时，需要在MCP客户端配置中添加以下配置：
+
+```json
+{
+  "yuerenge-database-mcp": {
+    "command": "uvx",
+    "args": [
+      "yuerenge-database-mcp"
+    ],
+    "env": {
+      "DATABASE_CONFIG_PATH": "path/to/config.json",
+      "ERROR_LOG_PATH": "path/to/log/directory"
+    }
+  }
+}
+```
 
 配置优先级（从高到低）：
 1. 环境变量 `DATABASE_CONFIG_PATH` 指定的文件

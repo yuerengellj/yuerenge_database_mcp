@@ -7,10 +7,10 @@ operations to specialized managers for connection management, table operations,
 data operations, and formatting.
 """
 
-from .connections.connection_manager import ConnectionManager
-from .operations.table_manager import TableManager
-from .operations.data_manager import DataManager
-from .formatting.format_manager import FormatManager
+from ..connections.connection_manager import ConnectionManager
+from ..operations.table_manager import TableManager
+from ..operations.data_manager import DataManager
+from ..formatting.format_manager import FormatManager
 
 
 class DatabaseManager:

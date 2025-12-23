@@ -2,7 +2,25 @@
 
 g# Yuerenge Database MCP
 
+## Package Structure
+
+The package follows a modular architecture organized as:
+
+```
+yuerenge_database_mcp/
+├── config/          # Configuration management
+├── db_tools/        # Database operations and tools
+│   ├── connections/ # Connection management
+│   ├── core/        # Core database functionality
+│   ├── formatting/  # Data formatting utilities
+│   ├── operations/  # Database operations
+│   └── utils/       # Utility functions
+└── server_lifecycle.py # Server lifecycle management
+```
+
 A database management tool based on the Model Context Protocol (MCP).
+
+This package follows a modular architecture with separate modules for configuration management, database operations, and server lifecycle management.
 
 ## Features
 
@@ -19,11 +37,33 @@ A database management tool based on the Model Context Protocol (MCP).
 pip install yuerenge-database-mcp
 ```
 
+## Package Modules
+
+The package is organized into several modules:
+
+- **config**: Handles database configuration loading, validation, and management
+- **db_tools**: Contains all database operation tools and utilities
+  - **connections**: Manages database connections and adapters
+  - **core**: Core database management functionality
+  - **formatting**: Data formatting utilities for different output formats
+  - **operations**: Data and table operation implementations
+  - **utils**: Utility functions including logging and specialized utilities
+
 ## Quick Start
 
 1. **Install the package**:
    ```bash
    pip install yuerenge-database-mcp
+   ```
+
+2. **Run the server directly**:
+   ```bash
+   yuerenge-database-mcp
+   ```
+
+   Or run with Python module syntax:
+   ```bash
+   python -m yuerenge_database_mcp
    ```
 
 2. **Create a configuration file** (optional, uses defaults if not provided):
@@ -66,6 +106,18 @@ Or with a specific configuration file:
 
 ```bash
 DATABASE_CONFIG_PATH=/path/to/your/config.json yuerenge-database-mcp
+```
+
+You can also run the server using the Python module syntax:
+
+```bash
+python -m yuerenge_database_mcp
+```
+
+Or using the run_server.py script:
+
+```bash
+python run_server.py
 ```
 
 ## Configuration
@@ -130,6 +182,25 @@ The server supports the following environment variables:
 - `DATABASE_CONFIG_PATH`: Specifies the path to the database configuration file
 - `ERROR_LOG_PATH`: Specifies the directory where error logs will be stored (default: ./error_logs)
 
+## MCP Server Configuration
+
+To use this as an MCP server, add the following configuration to your MCP client configuration:
+
+```json
+{
+  "yuerenge-database-mcp": {
+    "command": "uvx",
+    "args": [
+      "yuerenge-database-mcp"
+    ],
+    "env": {
+      "DATABASE_CONFIG_PATH": "path/to/config.json",
+      "ERROR_LOG_PATH": "path/to/log/directory"
+    }
+  }
+}
+```
+
 ## Tools Provided
 
 This MCP server provides the following tools:
@@ -169,6 +240,13 @@ This MCP server provides the following tools:
    - select_data_paged: Display table data in pages
    - select_data_summary: Display summary of table data
    - select_data_html: Display table data as HTML and open in browser
+
+These tools are implemented across multiple modules within the db_tools package:
+- Core database operations are in the `db_tools.core` module
+- Connection management is in the `db_tools.connections` module
+- Data operations are in the `db_tools.operations` module
+- Data formatting is in the `db_tools.formatting` module
+- Utility functions are in the `db_tools.utils` module
 
 ## Usage Examples
 

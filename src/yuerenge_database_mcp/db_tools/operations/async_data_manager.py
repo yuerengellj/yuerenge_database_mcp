@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 from sqlalchemy import text
 
 from .data_manager import DataManager
-from .exceptions import DataOperationError
+from ..core.exceptions import DataOperationError
 
 
 class AsyncDataManager:

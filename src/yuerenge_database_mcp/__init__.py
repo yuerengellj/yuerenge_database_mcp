@@ -34,7 +34,7 @@ import time
 from mcp.server.fastmcp import FastMCP
 
 from .config.config_manager import DatabaseConfigManager
-from .db_tools.database_manager import DatabaseManager
+from .db_tools.core.database_manager import DatabaseManager
 from .server_lifecycle import get_lifecycle_manager, add_cleanup_callback
 
 # Create an MCP server with custom configuration

@@ -1,6 +1,24 @@
 # Yuerenge 数据库 MCP
 
+## 包结构
+
+该包遵循模块化架构，组织如下：
+
+```
+yuerenge_database_mcp/
+├── config/          # 配置管理
+├── db_tools/        # 数据库操作和工具
+│   ├── connections/ # 连接管理
+│   ├── core/        # 核心数据库功能
+│   ├── formatting/  # 数据格式化
+│   ├── operations/  # 数据库操作
+│   └── utils/       # 实用函数
+└── server_lifecycle.py # 服务器生命周期管理
+```
+
 基于模型上下文协议（MCP）的数据库管理工具。
+
+此包遵循模块化架构，具有用于配置管理、数据库操作和服务器生命周期管理的独立模块。
 
 ## 功能特性
 
@@ -17,11 +35,33 @@
 pip install yuerenge-database-mcp
 ```
 
+## 包模块
+
+该包组织为多个模块：
+
+- **config**: 处理数据库配置加载、验证和管理
+- **db_tools**: 包含所有数据库操作工具和实用程序
+  - **connections**: 管理数据库连接和适配器
+  - **core**: 核心数据库管理功能
+  - **formatting**: 不同输出格式的数据格式化实用程序
+  - **operations**: 数据和表操作实现
+  - **utils**: 实用函数，包括日志记录和专用实用程序
+
 ## 快速开始
 
 1. **安装包**:
    ```bash
    pip install yuerenge-database-mcp
+   ```
+
+2. **直接运行服务器**:
+   ```bash
+   yuerenge-database-mcp
+   ```
+
+   或使用Python模块语法运行：
+   ```bash
+   python -m yuerenge_database_mcp
    ```
 
 2. **创建配置文件**（可选，不提供则使用默认值）:
@@ -64,6 +104,18 @@ yuerenge-database-mcp
 
 ```bash
 DATABASE_CONFIG_PATH=/path/to/your/config.json yuerenge-database-mcp
+```
+
+您也可以使用Python模块语法运行服务器：
+
+```bash
+python -m yuerenge_database_mcp
+```
+
+或使用run_server.py脚本：
+
+```bash
+python run_server.py
 ```
 
 ## 配置
@@ -128,6 +180,25 @@ DATABASE_CONFIG_PATH=/path/to/your/config.json yuerenge-database-mcp
 - `DATABASE_CONFIG_PATH`：指定数据库配置文件的路径
 - `ERROR_LOG_PATH`：指定错误日志存储的目录（默认：./error_logs）
 
+## MCP服务器配置
+
+要将此作为MCP服务器使用，请在您的MCP客户端配置中添加以下配置：
+
+```json
+{
+  "yuerenge-database-mcp": {
+    "command": "uvx",
+    "args": [
+      "yuerenge-database-mcp"
+    ],
+    "env": {
+      "DATABASE_CONFIG_PATH": "path/to/config.json",
+      "ERROR_LOG_PATH": "path/to/log/directory"
+    }
+  }
+}
+```
+
 ## 提供的工具
 
 此 MCP 服务器提供以下工具：
@@ -167,6 +238,13 @@ DATABASE_CONFIG_PATH=/path/to/your/config.json yuerenge-database-mcp
    - select_data_paged: 分页显示表格数据
    - select_data_summary: 摘要显示表格数据
    - select_data_html: 以HTML格式显示表格数据并自动打开浏览器
+
+这些工具在db_tools包的多个模块中实现：
+- 核心数据库操作在`db_tools.core`模块中
+- 连接管理在`db_tools.connections`模块中
+- 数据操作在`db_tools.operations`模块中
+- 数据格式化在`db_tools.formatting`模块中
+- 实用函数在`db_tools.utils`模块中
 
 ## 使用示例
 
