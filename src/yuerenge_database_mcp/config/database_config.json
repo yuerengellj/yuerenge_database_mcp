@@ -8,7 +8,7 @@
       "username": "user",
       "password": "password",
       "database": "mydb",
-      "enabled": true,
+      "enabled": false,
       "pool_size": 5,
       "max_overflow": 10,
       "pool_timeout": 30,
@@ -35,13 +35,13 @@
       "username": "user",
       "password": "password",
       "database": "ORCL",
-      "enabled": true
+      "enabled": false
     },
     {
       "name": "sqlite_db",
       "type": "sqlite",
-      "database": "/path/to/database.sqlite",
-      "enabled": true
+      "database": "/absolute/path/to/your_database.sqlite",
+      "enabled": false
     },
     {
       "name": "sqlserver_db",

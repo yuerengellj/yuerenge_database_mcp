@@ -51,29 +51,30 @@ def set_managers(database_manager, configuration_manager):
 def add_database_connection(
     name: str,
     db_type: str,
-    host: str,
-    port: int,
-    username: str,
-    password: str,
     database: str,
+    host: Optional[str] = None,
+    port: Optional[int] = None,
+    username: Optional[str] = None,
+    password: Optional[str] = None,
     save_to_config: bool = False
 ) -> bool:
     """
     Add a new database connection and optionally save to configuration.
-    
+
     This tool creates a new database connection and adds it to the connection pool.
     If save_to_config is True, the connection details are also saved to the configuration file.
-    
+    For SQLite, only name, db_type and database (the file path) are required.
+
     Args:
         name: Connection identifier (must be unique)
         db_type: Type of database (mysql, oracle, postgresql, sqlite, sqlserver)
-        host: Database host
-        port: Database port
-        username: Database username
-        password: Database password
-        database: Database name/schema
+        database: Database name/schema, or file path for SQLite
+        host: Database host (required for non-SQLite databases)
+        port: Database port (required for non-SQLite databases)
+        username: Database username (required for non-SQLite databases)
+        password: Database password (required for non-SQLite databases)
         save_to_config: Whether to save connection to configuration file
-        
+
     Returns:
         bool: True if connection successful, False otherwise
     """
@@ -81,26 +82,32 @@ def add_database_connection(
     success = db_manager.add_connection(
         name=name,
         db_type=db_type,
+        database=database,
         host=host,
         port=port,
         username=username,
-        password=password,
-        database=database
+        password=password
     )
-    
+
     # Save to config if requested and connection was successful
     if success and save_to_config:
-        config_manager.add_connection({
+        connection_config = {
             "name": name,
             "type": db_type,
-            "host": host,
-            "port": port,
-            "username": username,
-            "password": password,
             "database": database,
             "enabled": True
-        })
-    
+        }
+        # Only include network fields for non-SQLite databases
+        if host is not None:
+            connection_config["host"] = host
+        if port is not None:
+            connection_config["port"] = port
+        if username is not None:
+            connection_config["username"] = username
+        if password is not None:
+            connection_config["password"] = password
+        config_manager.add_connection(connection_config)
+
     return success
 
 

@@ -32,11 +32,11 @@ class ConnectionManager:
             self,
             name: str,
             db_type: str,
-            host: str,
-            port: int,
-            username: str,
-            password: str,
             database: str,
+            host: Optional[str] = None,
+            port: Optional[int] = None,
+            username: Optional[str] = None,
+            password: Optional[str] = None,
             **kwargs
     ) -> bool:
         """
@@ -45,11 +45,11 @@ class ConnectionManager:
         Args:
             name: Connection identifier
             db_type: Type of database (mysql, oracle, etc.)
-            host: Database host
-            port: Database port
-            username: Database username
-            password: Database password
-            database: Database name
+            database: Database name (or file path for SQLite)
+            host: Database host (optional, not required for SQLite)
+            port: Database port (optional, not required for SQLite)
+            username: Database username (optional, not required for SQLite)
+            password: Database password (optional, not required for SQLite)
             **kwargs: Additional connection parameters including pool settings
 
         Returns:
@@ -80,7 +80,8 @@ class ConnectionManager:
             )
 
             # Log connection attempt
-            self.logger.info(f"[Request ID: {request_id}] Attempting to connect to {db_type} database '{name}' at {host}:{port}")
+            location = f" at {host}:{port}" if host else ""
+            self.logger.info(f"[Request ID: {request_id}] Attempting to connect to {db_type} database '{name}'{location}")
             
             # Create engine with additional options
             engine = create_engine(connection_string, **engine_options)
@@ -193,17 +194,20 @@ class ConnectionManager:
             try:
                 self.logger.info(f"[Request ID: {request_id}] Initializing connection '{name}' from config")
                 
-                # Extract connection parameters
+                # Extract connection parameters.
+                # SQLite only needs name, type and database (file path);
+                # other database types additionally require host, port, username, password.
                 connection_params = {
                     "name": name,
                     "db_type": conn_config["type"],
-                    "host": conn_config["host"],
-                    "port": conn_config["port"],
-                    "username": conn_config["username"],
-                    "password": conn_config["password"],
                     "database": conn_config["database"],
                     "request_id": request_id
                 }
+                if conn_config["type"].lower() != "sqlite":
+                    connection_params["host"] = conn_config["host"]
+                    connection_params["port"] = conn_config["port"]
+                    connection_params["username"] = conn_config["username"]
+                    connection_params["password"] = conn_config["password"]
                 
                 # Add optional connection pool parameters
                 optional_params = ["pool_size", "max_overflow", "pool_timeout", "pool_recycle"]

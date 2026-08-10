@@ -182,7 +182,33 @@ python run_server.py
 
 ## MCP服务器配置
 
-要将此作为MCP服务器使用，请在您的MCP客户端配置中添加以下配置：
+要将此作为MCP服务器使用，请在您的MCP客户端配置中添加以下配置。
+
+> **重要提示**：只有在包已发布到 PyPI 时，才应使用 `uvx yuerenge-database-mcp`。
+> 如果您使用的是本地源码（例如本仓库），请让客户端直接指向本地解释器和包，
+> 否则客户端将无法找到服务器。
+
+### 本地源码（Windows，推荐）
+
+```json
+{
+  "yuerenge-database-mcp": {
+    "command": "D:\\File\\Workspace\\MCP\\yuerenge_database_mcp\\.venv\\Scripts\\python.exe",
+    "args": [
+      "run_server.py"
+    ],
+    "cwd": "D:\\File\\Workspace\\MCP\\yuerenge_database_mcp",
+    "env": {
+      "DATABASE_CONFIG_PATH": "D:\\File\\Workspace\\MCP\\yuerenge_database_mcp\\src\\yuerenge_database_mcp\\config\\database_config.json",
+      "ERROR_LOG_PATH": "D:\\File\\Workspace\\MCP\\yuerenge_database_mcp\\error_logs"
+    }
+  }
+}
+```
+
+### 已安装的包（PyPI）
+
+如果您已经从 PyPI 安装了包（或安装了 `dist/` 中构建的 wheel），可以直接使用控制台脚本：
 
 ```json
 {

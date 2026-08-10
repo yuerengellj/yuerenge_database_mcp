@@ -1,6 +1,6 @@
 
 
-g# Yuerenge Database MCP
+# Yuerenge Database MCP
 
 ## Package Structure
 
@@ -184,7 +184,34 @@ The server supports the following environment variables:
 
 ## MCP Server Configuration
 
-To use this as an MCP server, add the following configuration to your MCP client configuration:
+To use this as an MCP server, add the following configuration to your MCP client configuration.
+
+> **Important**: Only use `uvx yuerenge-database-mcp` if the package has been published to PyPI.
+> If you are using a local checkout (like this repository), point the client at your local
+> interpreter and the package directly instead, otherwise the client won't be able to find the server.
+
+### Local source checkout (Windows, recommended)
+
+```json
+{
+  "yuerenge-database-mcp": {
+    "command": "D:\\File\\Workspace\\MCP\\yuerenge_database_mcp\\.venv\\Scripts\\python.exe",
+    "args": [
+      "run_server.py"
+    ],
+    "cwd": "D:\\File\\Workspace\\MCP\\yuerenge_database_mcp",
+    "env": {
+      "DATABASE_CONFIG_PATH": "D:\\File\\Workspace\\MCP\\yuerenge_database_mcp\\src\\yuerenge_database_mcp\\config\\database_config.json",
+      "ERROR_LOG_PATH": "D:\\File\\Workspace\\MCP\\yuerenge_database_mcp\\error_logs"
+    }
+  }
+}
+```
+
+### Installed package (PyPI)
+
+If you have installed the package from PyPI (or built and installed the wheel in `dist/`), you can use
+the console script directly:
 
 ```json
 {
